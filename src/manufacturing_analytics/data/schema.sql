@@ -99,9 +99,55 @@ CREATE TABLE IF NOT EXISTS die_results (
     UNIQUE (wafer_id, x_coordinate, y_coordinate)
 );
 
+CREATE TABLE IF NOT EXISTS measurement_characteristics (
+    characteristic_id TEXT PRIMARY KEY,
+    operation_code TEXT NOT NULL REFERENCES operations(operation_code),
+    characteristic_name TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    lower_spec_limit REAL,
+    upper_spec_limit REAL,
+    CHECK (lower_spec_limit IS NULL OR upper_spec_limit IS NULL OR lower_spec_limit < upper_spec_limit)
+);
+
+CREATE TABLE IF NOT EXISTS process_measurements (
+    measurement_id INTEGER PRIMARY KEY,
+    wafer_id TEXT NOT NULL REFERENCES wafers(wafer_id),
+    operation_code TEXT NOT NULL REFERENCES operations(operation_code),
+    tool_id TEXT NOT NULL REFERENCES tools(tool_id),
+    characteristic_id TEXT NOT NULL REFERENCES measurement_characteristics(characteristic_id),
+    measured_timestamp TEXT NOT NULL,
+    source_arrival_timestamp TEXT NOT NULL,
+    measured_value REAL NOT NULL,
+    UNIQUE (wafer_id, characteristic_id)
+);
+
+CREATE TABLE IF NOT EXISTS data_quality_issues (
+    issue_id INTEGER PRIMARY KEY,
+    issue_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    detected_timestamp TEXT NOT NULL,
+    evidence TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_watermarks (
+    source_name TEXT PRIMARY KEY,
+    watermark_timestamp TEXT NOT NULL,
+    observed_timestamp TEXT NOT NULL,
+    expected_max_lag_minutes INTEGER NOT NULL CHECK (expected_max_lag_minutes > 0),
+    row_count INTEGER NOT NULL CHECK (row_count >= 0)
+);
+
 CREATE INDEX IF NOT EXISTS idx_lots_work_order ON lots(work_order_id);
 CREATE INDEX IF NOT EXISTS idx_wafers_lot ON wafers(lot_id);
 CREATE INDEX IF NOT EXISTS idx_wafer_operations_tool ON wafer_operations(tool_id, operation_code);
 CREATE INDEX IF NOT EXISTS idx_inspections_wafer ON inspections(wafer_id);
 CREATE INDEX IF NOT EXISTS idx_yield_timestamp ON yield_results(measured_timestamp);
 CREATE INDEX IF NOT EXISTS idx_die_results_wafer ON die_results(wafer_id, y_coordinate, x_coordinate);
+CREATE INDEX IF NOT EXISTS idx_measurements_characteristic_time
+    ON process_measurements(characteristic_id, measured_timestamp);
+CREATE INDEX IF NOT EXISTS idx_measurements_tool_time
+    ON process_measurements(tool_id, measured_timestamp);
+CREATE INDEX IF NOT EXISTS idx_quality_issue_entity
+    ON data_quality_issues(entity_type, entity_id);

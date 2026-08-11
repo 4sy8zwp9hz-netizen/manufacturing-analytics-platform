@@ -40,6 +40,19 @@ class SyntheticDataGenerator:
         ("OPEN", "Open", "Incomplete feature connection"),
         ("EDGE", "Edge Exclusion", "Wafer-edge process signature"),
     )
+    CHARACTERISTIC_SPECS = (
+        (
+            "FILM_UNIFORMITY",
+            "OP-200",
+            "Fictional Film Uniformity",
+            "synthetic units",
+            100.0,
+            94.0,
+            106.0,
+        ),
+        ("LINE_WIDTH", "OP-300", "Fictional Line Width", "synthetic units", 50.0, 45.0, 55.0),
+        ("ETCH_DEPTH", "OP-400", "Fictional Etch Depth", "synthetic units", 80.0, 74.0, 88.0),
+    )
 
     def __init__(self, config: GenerationConfig) -> None:
         config.validate()
@@ -62,6 +75,10 @@ class SyntheticDataGenerator:
                 "inspection_defects",
                 "yield_results",
                 "die_results",
+                "measurement_characteristics",
+                "process_measurements",
+                "data_quality_issues",
+                "source_watermarks",
             )
         }
         self._add_reference_data(data)
@@ -70,6 +87,7 @@ class SyntheticDataGenerator:
         event_id = 1
         inspection_id = 1
         yield_id = 1
+        measurement_id = 1
 
         for work_order_index in range(1, self.config.work_order_count + 1):
             work_order_id = f"WO-{work_order_index:04d}"
@@ -120,6 +138,10 @@ class SyntheticDataGenerator:
                         event_start = lot_start + timedelta(
                             hours=sequence * 5, minutes=wafer_number * 3
                         )
+                        if wafer_id == 29 and operation_code == "OP-400":
+                            event_start -= timedelta(hours=6)
+                        if wafer_id == 19 and operation_code == "OP-300":
+                            continue
                         data["wafer_operations"].append(
                             {
                                 "wafer_operation_id": event_id,
@@ -133,6 +155,32 @@ class SyntheticDataGenerator:
                             }
                         )
                         event_id += 1
+
+                        characteristic = self._characteristic_for_operation(operation_code)
+                        if characteristic and not (
+                            wafer_id == 17 and characteristic[0] == "LINE_WIDTH"
+                        ):
+                            measured_timestamp = event_start + timedelta(minutes=44)
+                            arrival_delay = (
+                                timedelta(hours=5) if wafer_id % 29 == 0 else timedelta(minutes=5)
+                            )
+                            data["process_measurements"].append(
+                                {
+                                    "measurement_id": measurement_id,
+                                    "wafer_id": wafer_key,
+                                    "operation_code": operation_code,
+                                    "tool_id": tool_id,
+                                    "characteristic_id": characteristic[0],
+                                    "measured_timestamp": self._iso(measured_timestamp),
+                                    "source_arrival_timestamp": self._iso(
+                                        measured_timestamp + arrival_delay
+                                    ),
+                                    "measured_value": self._measurement_value(
+                                        characteristic[0], wafer_id, tool_id
+                                    ),
+                                }
+                            )
+                            measurement_id += 1
 
                         if operation_code in {"OP-500", "OP-600"}:
                             defect_total = max(0, round(self.random.gauss(5, 2)))
@@ -179,6 +227,7 @@ class SyntheticDataGenerator:
                     data["die_results"].extend(die_rows)
                     wafer_id += 1
                     yield_id += 1
+        self._add_data_quality_examples(data)
         return data
 
     def _add_reference_data(self, data: dict[str, list[dict[str, Any]]]) -> None:
@@ -204,6 +253,134 @@ class SyntheticDataGenerator:
             data["defect_categories"].append(
                 {"defect_code": code, "defect_name": name, "description": description}
             )
+        for (
+            characteristic_id,
+            operation_code,
+            name,
+            unit,
+            _,
+            lower,
+            upper,
+        ) in self.CHARACTERISTIC_SPECS:
+            data["measurement_characteristics"].append(
+                {
+                    "characteristic_id": characteristic_id,
+                    "operation_code": operation_code,
+                    "characteristic_name": name,
+                    "unit": unit,
+                    "lower_spec_limit": lower,
+                    "upper_spec_limit": upper,
+                }
+            )
+
+    def _characteristic_for_operation(self, operation_code: str) -> tuple[Any, ...] | None:
+        return next(
+            (item for item in self.CHARACTERISTIC_SPECS if item[1] == operation_code),
+            None,
+        )
+
+    def _measurement_value(self, characteristic: str, wafer_number: int, tool_id: str) -> float:
+        if characteristic == "FILM_UNIFORMITY":
+            sigma = 1.8 if tool_id == "DEPO-02" and wafer_number >= 35 else 0.65
+            value = 100.0 + (0.55 if tool_id == "DEPO-02" else 0.0) + self.random.gauss(0, sigma)
+        elif characteristic == "LINE_WIDTH":
+            shift = 1.5 if 25 <= wafer_number <= 40 else 0.0
+            value = 50.0 + shift + self.random.gauss(0, 0.45)
+            if wafer_number == 47:
+                value += 5.2
+        else:
+            drift = max(0, wafer_number - 25) * 0.10 if tool_id == "ETCH-02" else 0.0
+            offset = 1.15 if tool_id == "ETCH-02" else 0.0
+            value = 80.0 + offset + drift + self.random.gauss(0, 0.32)
+            if wafer_number == 52:
+                value += 4.8
+        return round(value, 4)
+
+    def _add_data_quality_examples(self, data: dict[str, list[dict[str, Any]]]) -> None:
+        detected = "2026-02-01T12:00:00+00:00"
+        examples = (
+            (
+                "MISSING_PROCESS_EVENT",
+                "HIGH",
+                "WAFER",
+                "WFR-00019",
+                "Expected route event OP-300 is absent.",
+            ),
+            (
+                "DUPLICATE_SOURCE_EVENT",
+                "MEDIUM",
+                "WAFER",
+                "WFR-00023",
+                "A repeated fictional source event key was quarantined.",
+            ),
+            (
+                "IMPOSSIBLE_SEQUENCE",
+                "HIGH",
+                "WAFER",
+                "WFR-00029",
+                "OP-400 timestamp precedes completion of OP-300.",
+            ),
+            (
+                "MISSING_MEASUREMENT",
+                "MEDIUM",
+                "WAFER",
+                "WFR-00017",
+                "Expected LINE_WIDTH result is absent.",
+            ),
+            (
+                "DELAYED_EVENT",
+                "LOW",
+                "WAFER",
+                "WFR-00029",
+                "Measurement arrived five hours after acquisition.",
+            ),
+            (
+                "STALE_SOURCE",
+                "HIGH",
+                "SOURCE",
+                "SYNTHETIC_INSPECTION_FEED",
+                "Watermark exceeds its fictional freshness objective.",
+            ),
+        )
+        for issue_id, (issue_type, severity, entity_type, entity_id, evidence) in enumerate(
+            examples, start=1
+        ):
+            data["data_quality_issues"].append(
+                {
+                    "issue_id": issue_id,
+                    "issue_type": issue_type,
+                    "severity": severity,
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "detected_timestamp": detected,
+                    "evidence": evidence,
+                }
+            )
+        data["source_watermarks"].extend(
+            (
+                {
+                    "source_name": "SYNTHETIC_EVENT_FEED",
+                    "watermark_timestamp": "2026-02-01T11:56:00+00:00",
+                    "observed_timestamp": detected,
+                    "expected_max_lag_minutes": 15,
+                    "row_count": len(data["wafer_operations"]),
+                },
+                {
+                    "source_name": "SYNTHETIC_MEASUREMENT_FEED",
+                    "watermark_timestamp": "2026-02-01T11:52:00+00:00",
+                    "observed_timestamp": detected,
+                    "expected_max_lag_minutes": 20,
+                    "row_count": len(data["process_measurements"]),
+                },
+                {
+                    "source_name": "SYNTHETIC_INSPECTION_FEED",
+                    "watermark_timestamp": "2026-01-31T08:00:00+00:00",
+                    "observed_timestamp": detected,
+                    "expected_max_lag_minutes": 60,
+                    "row_count": len(data["inspections"]),
+                },
+            )
+        )
 
     def _allocate_defects(
         self, data: dict[str, list[dict[str, Any]]], inspection_id: int, total: int

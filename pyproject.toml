@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "manufacturing-analytics-platform"
-version = "0.2.0"
+version = "0.3.0"
 description = "A production-style semiconductor manufacturing analytics portfolio built with synthetic data."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -12,19 +12,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from manufacturing_analytics.analytics.models import AnalyticsFilters
+from manufacturing_analytics.analytics.process_service import ProcessAnalyticsService
 from manufacturing_analytics.analytics.service import AnalyticsService
 from manufacturing_analytics.data.analytics_repository import AnalyticsRepository
 from manufacturing_analytics.data.repositories import ManufacturingRepository
 
 TEMPLATES = Jinja2Templates(directory=Path(__file__).with_name("templates"))
 router = APIRouter()
-PLACEHOLDER_PAGES = {
-    "process-spc": ("Process / SPC", "Monitor process stability and control limits."),
-    "manufacturing-operations": (
-        "Manufacturing Operations",
-        "Explore route cycle time, queue time, and tool utilization.",
-    ),
-}
+PLACEHOLDER_PAGES = {}
 
 
 def analytics_filters(
@@ -57,6 +52,10 @@ def _analytics(request: Request) -> AnalyticsService:
 def _options(request: Request) -> dict[str, list[dict[str, object]]]:
     repository: AnalyticsRepository = _analytics(request).repository
     return repository.filter_options()
+
+
+def _process_analytics(request: Request) -> ProcessAnalyticsService:
+    return request.app.state.process_analytics
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -155,6 +154,58 @@ def wafer_detail(
         request=request,
         name="wafer_detail.html",
         context={"model": model, "filters": filters},
+    )
+
+
+@router.get("/analytics/process-spc", response_class=HTMLResponse)
+def process_spc(
+    request: Request,
+    filters: Annotated[AnalyticsFilters, Depends(analytics_filters)],
+    characteristic: Annotated[str, Query()] = "ETCH_DEPTH",
+    subgroup_method: Annotated[str, Query()] = "INDIVIDUALS",
+) -> HTMLResponse:
+    service = _process_analytics(request)
+    try:
+        model = service.process_monitor(characteristic, filters, subgroup_method)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    options = _options(request)
+    options["characteristics"] = service.process_repository.characteristics()
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="process_spc.html",
+        context={
+            "model": model,
+            "filters": filters,
+            "options": options,
+            "characteristic": characteristic,
+            "subgroup_method": subgroup_method,
+        },
+    )
+
+
+@router.get("/analytics/manufacturing-operations", response_class=HTMLResponse)
+def manufacturing_operations(
+    request: Request,
+    filters: Annotated[AnalyticsFilters, Depends(analytics_filters)],
+) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="manufacturing_operations.html",
+        context={
+            "model": _process_analytics(request).operations_flow(filters),
+            "filters": filters,
+            "options": _options(request),
+        },
+    )
+
+
+@router.get("/analytics/data-quality", response_class=HTMLResponse)
+def data_quality(request: Request) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="data_quality.html",
+        context={"model": _process_analytics(request).data_quality()},
     )
 
 

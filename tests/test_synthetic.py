@@ -18,7 +18,8 @@ def test_generation_preserves_counts_and_relationships() -> None:
     assert len(dataset["lots"]) == 6
     assert len(dataset["wafers"]) == expected_wafer_count(config)
     assert len(dataset["yield_results"]) == len(dataset["wafers"])
-    assert len(dataset["wafer_operations"]) == len(dataset["wafers"]) * 6
+    expected_operations = len(dataset["wafers"]) * 6 - int(len(dataset["wafers"]) >= 19)
+    assert len(dataset["wafer_operations"]) == expected_operations
     assert len(dataset["die_results"]) == len(dataset["wafers"]) * 317
 
     wafer_ids = {row["wafer_id"] for row in dataset["wafers"]}

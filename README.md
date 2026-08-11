@@ -17,7 +17,7 @@ This project implements that connected path:
 Yield signal → filtered cohort → lot → wafer map → process genealogy → tool comparison → defect Pareto
 ```
 
-Phase 2 prioritizes a coherent workflow over a gallery of unrelated charts. A filter model and analytics service keep every page aligned on the same cohort and metric definitions.
+Phase 3 extends that coherent workflow from yield investigation into process behavior, SPC evidence, operational flow, and data trust. Filter and service models keep every page aligned on explicit cohorts and definitions.
 
 ## Investigation experience
 
@@ -45,6 +45,24 @@ Each wafer contains 317 unique coordinate results. The interactive SVG map expos
 
 The filter-aware Pareto combines classified defect counts, percentage contribution, and cumulative percentage. Statistical calculations live in the domain layer and have focused unit tests.
 
+### Process / SPC
+
+![Individuals and Moving Range process-monitoring workflow](docs/screenshots/process-spc.png)
+
+Time-ordered continuous measurements, explicit behavior-based control limits, separate engineering specification limits, moving ranges, tool stratification, and point-level evidence for three documented SPC rules.
+
+### Manufacturing Operations
+
+![Manufacturing cycle, queue, route, and throughput investigation](docs/screenshots/manufacturing-operations.png)
+
+Cycle time, queue time, route elapsed time, observed completions, and wafer/lot drill-down are calculated directly from fictional event timestamps. Utilization is deliberately omitted because no capacity calendar exists.
+
+### Data Quality
+
+![Data-quality findings and source watermarks](docs/screenshots/data-quality.png)
+
+Missing, duplicate, delayed, out-of-sequence, missing-measurement, and stale-source scenarios are visible alongside source-specific freshness objectives and watermarks.
+
 ## Investigation Walkthrough
 
 One fictional walkthrough using the configured seed:
@@ -58,11 +76,22 @@ One fictional walkthrough using the configured seed:
 
 This sequence supports a hypothesis about a fictional process/tool relationship. It does **not** prove causation. A real investigation would check confounding, sampling, metrology, maintenance history, temporal ordering, repeatability, and designed experiments.
 
+## SPC Investigation Walkthrough
+
+1. Open **Process / SPC** for fictional etch depth. The aggregate series remains mostly inside its broad fictional specifications and can initially look reasonable.
+2. Compare the tool strata: `ETCH-02` has a higher mean and substantially more rule signals than `ETCH-01`.
+3. Filter to `ETCH-02`. The time-ordered series exposes its deterministic offset and gradual drift without mixing the more stable tool into the estimate.
+4. Review the triggered rule, its exact evidence window, wafer, timestamp, and value. No opaque process-health score is used.
+5. Open the affected wafer and lot to inspect manufacturing genealogy and neighboring evidence.
+6. Treat the result as a process signal requiring engineering investigation—not automatic proof that the tool caused the measurement behavior.
+
+A real response would validate the measurement system, sampling plan, maintenance and recipe history, material/product mix, autocorrelation, and the appropriateness of the Phase I limit-estimation window.
+
 ## Architecture
 
-- **Domain:** deterministic coordinate generation, yield validation, and Pareto math
-- **Data:** relational schema, transactions, parameterized analytics SQL, and indexes
-- **Analytics:** canonical filters, metric definitions, investigation workflows, and timing
+- **Domain:** deterministic process behavior, I/MR limits, control rules, operations math, freshness, yield, and Pareto calculations
+- **Data:** relational schema, process measurements, watermarks, transactions, parameterized analytics SQL, and indexes
+- **Analytics:** canonical cohorts, SPC/operations/quality workflows, metric definitions, and timing
 - **Services:** safe local bootstrap of reproducible generated data
 - **Web:** HTTP validation, status codes, context serialization, and presentation
 - **Composition:** explicit startup wiring and application lifecycle
@@ -75,7 +104,7 @@ Routes contain no SQL; templates calculate no manufacturing statistics. See [ARC
 | --- | --- | --- |
 | Runtime | Python 3.11+ | Type hints, `tomllib`, broad deployment support |
 | Web | FastAPI + Jinja2 | Testable application factory without a frontend build system |
-| Charts | Chart.js 4 | Focused interactive comparisons with accessible data tables |
+| Charts | Locally bundled Chart.js 4 | Reproducible interactive comparisons without third-party runtime requests |
 | Wafer map | Server-rendered SVG | Coordinate-native, inspectable, and lightweight interaction |
 | Storage | SQLite + explicit SQL | Zero-service setup and transparent relational/query design |
 | Tests | pytest + HTTPX | Isolated behavior and end-to-end route validation |
@@ -87,10 +116,13 @@ Routes contain no SQL; templates calculate no manufacturing statistics. See [ARC
 ```text
 Work order → lot → wafer → operation/tool history
                     ├── inspection → classified defects
-                    └── yield result → coordinate-level die results
+                    ├── yield result → coordinate-level die results
+                    └── process measurement → characteristic + specification
+Source watermark → freshness state
+Quality finding → affected wafer/source + evidence
 ```
 
-The generator embeds deterministic uniform, edge-degradation, localized-cluster, and random-loss wafer signatures plus a modest fictional tool effect. Aggregate yield is calculated from coordinate results, preventing disagreement between the KPI and wafer map.
+The generator embeds deterministic spatial signatures plus stable variation, tool offset, mean shift, drift, increased variation, and an isolated process outlier. Aggregate yield is calculated from coordinate results, preventing disagreement between the KPI and wafer map.
 
 ## Quick start
 
@@ -125,6 +157,11 @@ python -m manufacturing_analytics.scripts.benchmark_queries
 | Lot/work-order count | Distinct parent entities represented by filtered wafers |
 | Tool comparison | Final wafer yield grouped by tool exposure at one operation |
 | Defect contribution | Category count ÷ all classified inspection defects in the cohort |
+| Individuals limits | Center ± 3 × MR̄/1.128 for time-ordered individual values |
+| Specification limits | Fictional externally defined engineering requirements, never control limits |
+| Cycle time | Event end timestamp − event start timestamp |
+| Queue time | Next event start − previous event end for one wafer |
+| Freshness | Observation timestamp − published source watermark |
 
 The time filter uses the final yield timestamp. Tool comparisons are screening views and do not control automatically for product, time, route, or other confounders.
 
@@ -134,16 +171,17 @@ Defaults live in `config/default.toml`. `MAP_ENVIRONMENT`, `MAP_DATABASE_PATH`, 
 
 ## Testing strategy
 
-Tests validate deterministic coordinate output, circular map geometry, coordinate uniqueness, map-to-yield reconciliation, discoverable spatial effects, foreign-key integrity, weighted yield, Pareto math, filters, embedded tool signal, query timing, drill-down models, rendered routes, invalid dates, and missing entities.
+Tests validate deterministic process and coordinate output, control limits, moving ranges, three SPC rules and evidence, rational subgroup validation, tool drift/stratification, cycle and queue calculations, event completeness and ordering, source freshness, relational integrity, filters, drill-down models, local assets, HTTP errors, and rendered routes.
 
 ## Tradeoffs and limitations
 
 - SQLite optimizes local reproducibility, not concurrent analytical workloads.
-- Chart.js is loaded from a pinned CDN in this portfolio iteration; production should bundle it and apply a Content Security Policy.
+- Chart.js is pinned and bundled locally with its license; an internet-facing deployment should still apply a Content Security Policy.
 - Server-rendered SVG is ideal for 317 sites but dense maps may need canvas/WebGL or aggregation.
 - Tool comparisons show association and can be confounded; they are not causal models.
 - Inspection defects provide investigation context but are not asserted to cause electrical failures.
 - In-process timing establishes a baseline but is not distributed observability.
+- I/MR limits assume a meaningful time order and use moving ranges of two; autocorrelation, non-normality, mixed distributions, or unstable Phase I data can make the limits misleading.
 - No cache or precomputed table is added because measured local queries remain near one millisecond.
 
 ## Repository layout
@@ -154,14 +192,14 @@ docs/                           Model, performance, and screenshots
 src/manufacturing_analytics/
   analytics/                    Filters, metrics, workflows, timing
   data/                         Schema, database adapter, analytics queries
-  domain/                       Synthetic behavior and reusable statistics
+  domain/                       Synthetic behavior, SPC rules, quality, operations math
   scripts/                      Generation and benchmark commands
   services/                     Application use cases
   web/                          Routes, templates, and static assets
 tests/                          Behavioral unit and HTTP tests
 ```
 
-See [ROADMAP.md](ROADMAP.md) for SPC/process monitoring, operational analytics, performance, refresh, and deployment phases.
+See [ROADMAP.md](ROADMAP.md) for scale testing, background refresh, caching, and deployment phases.
 
 ## License
 

@@ -21,6 +21,10 @@ LOAD_ORDER = (
     "inspection_defects",
     "yield_results",
     "die_results",
+    "measurement_characteristics",
+    "process_measurements",
+    "data_quality_issues",
+    "source_watermarks",
 )
 
 

@@ -14,6 +14,8 @@ The default deterministic configuration generates:
 | Wafer-operation events | 360 |
 | Inspections | 120 |
 | Coordinate-level die results | 19,020 |
+| Continuous process measurements | 178 |
+| Data-quality findings / source watermarks | 6 / 3 |
 
 ## Local baseline
 
@@ -28,6 +30,11 @@ The figures below came from 20 warm iterations on the project’s Windows develo
 | Defect Pareto | 0.846 | 1.079 |
 | Lot detail | 0.690 | 1.132 |
 | Wafer map | 0.897 | 1.028 |
+| Process measurements | 0.860 | 1.095 |
+| Operation-flow events | 1.932 | 2.470 |
+| Operation throughput | 1.137 | 1.629 |
+| Quality findings | 0.585 | 0.791 |
+| Source watermarks | 0.518 | 0.709 |
 
 Reproduce the baseline with:
 

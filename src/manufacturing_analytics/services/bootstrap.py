@@ -14,7 +14,8 @@ def ensure_demo_data(database: Database, settings: Settings) -> bool:
     database.initialize()
     wafer_count = database.scalar("SELECT COUNT(*) FROM wafers")
     die_count = database.scalar("SELECT COUNT(*) FROM die_results")
-    if wafer_count and die_count:
+    measurement_count = database.scalar("SELECT COUNT(*) FROM process_measurements")
+    if wafer_count and die_count and measurement_count:
         return False
 
     LOGGER.info("Generating deterministic synthetic manufacturing dataset")

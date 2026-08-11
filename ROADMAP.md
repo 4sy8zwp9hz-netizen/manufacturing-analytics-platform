@@ -18,15 +18,16 @@
 - Dedicated analytics service/repository boundary and query timing
 - Behavioral tests for generation, filters, queries, routes, and errors
 
-## Phase 3 — Process monitoring and operations
+## Phase 3 — Process monitoring and operations (complete)
 
-- SPC charts with configurable subgrouping and rational sampling guidance
-- Control-limit calculation separated from engineering specification limits
-- Tested Western Electric/Nelson-style rule evaluation with clear assumptions
-- Tool and operation comparisons with product/time stratification
-- Manufacturing genealogy timeline with cycle-time and queue-time analysis
-- Data-quality diagnostics, missing-event handling, and freshness indicators
-- Accessible chart alternatives and locally bundled front-end assets
+- Deterministic continuous measurements with shifts, drift, variation, offsets, and outlier behavior
+- Individuals / Moving Range charts with rational-subgroup validation
+- Control limits kept visually and conceptually separate from specification limits
+- Tested point, run, and trend rule evaluation with exact evidence windows
+- Tool/product/time stratification and manufacturing-genealogy drill-down
+- Cycle, queue, route elapsed, and observed-throughput analysis
+- Data-quality findings, source watermarks, and freshness indicators
+- Locally bundled Chart.js assets and tabular/textual evidence
 
 ## Phase 4 — Performance and refresh
 
@@ -43,4 +44,3 @@
 - CI for formatting, tests, dependency and container checks
 - Metrics, traces, structured JSON logs, and alerting guidance
 - Threat model, secrets strategy, backup/restore exercise, and runbook
-

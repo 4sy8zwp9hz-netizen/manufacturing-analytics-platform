@@ -7,10 +7,12 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from manufacturing_analytics.analytics.process_service import ProcessAnalyticsService
 from manufacturing_analytics.analytics.service import AnalyticsService
 from manufacturing_analytics.config import get_settings
 from manufacturing_analytics.data.analytics_repository import AnalyticsRepository
 from manufacturing_analytics.data.database import Database
+from manufacturing_analytics.data.process_repository import ProcessRepository
 from manufacturing_analytics.data.repositories import ManufacturingRepository
 from manufacturing_analytics.logging_config import configure_logging
 from manufacturing_analytics.services.bootstrap import ensure_demo_data
@@ -30,9 +32,10 @@ def create_app(database_path: Path | str | None = None) -> FastAPI:
         app.state.database = database
         app.state.repository = ManufacturingRepository(database)
         app.state.analytics = AnalyticsService(AnalyticsRepository(database))
+        app.state.process_analytics = ProcessAnalyticsService(ProcessRepository(database))
         yield
 
-    application = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+    application = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
     application.mount("/static", StaticFiles(directory=WEB_ROOT / "static"), name="static")
     application.include_router(router)
     return application

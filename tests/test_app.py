@@ -52,3 +52,18 @@ def test_invalid_filters_and_missing_entities(tmp_path: Path) -> None:
     assert reversed_range.status_code == 422
     assert missing_lot.status_code == 404
     assert missing_wafer.status_code == 404
+
+
+def test_phase_three_routes_and_local_chart_asset(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "phase3.db")
+    with TestClient(app) as client:
+        spc = client.get("/analytics/process-spc?characteristic=ETCH_DEPTH")
+        operations = client.get("/analytics/manufacturing-operations")
+        quality = client.get("/analytics/data-quality")
+        chart_asset = client.get("/static/vendor/chart.umd.min.js")
+
+    assert spc.status_code == 200 and "Control limits ≠ specification limits" in spc.text
+    assert "cdn.jsdelivr" not in spc.text
+    assert operations.status_code == 200 and "OBSERVED THROUGHPUT" in operations.text
+    assert quality.status_code == 200 and "Watermarks" in quality.text
+    assert chart_asset.status_code == 200 and len(chart_asset.content) > 100_000

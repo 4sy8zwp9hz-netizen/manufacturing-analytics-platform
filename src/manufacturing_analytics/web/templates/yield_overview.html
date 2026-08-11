@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Yield Overview · Manufacturing Analytics{% endblock %}
-{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>{% endblock %}
+{% block head %}<script src="{{ url_for('static', path='/vendor/chart.umd.min.js') }}"></script>{% endblock %}
 {% block content %}
 <section class="page-heading">
   <div><p class="eyebrow">YIELD OVERVIEW</p><h1>Find the signal. Follow the genealogy.</h1><p class="lede">Start with a cohort, compare performance, then open a lot to investigate its wafers, tools, inspections, and spatial results.</p></div>
