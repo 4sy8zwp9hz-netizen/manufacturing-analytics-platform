@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Manufacturing Analytics Platform{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">MAP<span>synthetic</span></a>
+      <span class="environment">Portfolio Demo</span>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" aria-label="Analytics navigation">
+        <a href="/" class="nav-home">Overview</a>
+        <a href="/analytics/yield-overview">Yield Overview</a>
+        <a href="/analytics/wafer-analysis">Wafer Analysis</a>
+        <a href="/analytics/pareto-analysis">Pareto Analysis</a>
+        <a href="/analytics/process-spc">Process / SPC</a>
+        <a href="/analytics/manufacturing-operations">Manufacturing Operations</a>
+        <p class="synthetic-note">All displayed manufacturing data is generated and fictional.</p>
+      </nav>
+      <main>{% block content %}{% endblock %}</main>
+    </div>
+  </body>
+</html>
+

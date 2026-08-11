@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">SEMICONDUCTOR MANUFACTURING ANALYTICS</p>
+  <h1>From factory context to explainable yield decisions.</h1>
+  <p class="lede">A production-minded analytics foundation connecting work orders, lots, wafers, process history, inspections, defects, and yield—using only deterministic synthetic data.</p>
+</section>
+
+<section class="metrics" aria-label="Dataset summary">
+  <article><span>Work orders</span><strong>{{ summary.work_orders }}</strong></article>
+  <article><span>Lots</span><strong>{{ summary.lots }}</strong></article>
+  <article><span>Wafers</span><strong>{{ summary.wafers }}</strong></article>
+  <article><span>Tools</span><strong>{{ summary.tools }}</strong></article>
+  <article class="accent"><span>Average yield</span><strong>{{ "%.2f"|format(summary.average_yield * 100) }}%</strong></article>
+</section>
+
+<section class="panel">
+  <div class="panel-heading">
+    <div><p class="eyebrow">RECENT PRODUCTION</p><h2>Lot summary</h2></div>
+    <span class="status">Synthetic dataset ready</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Lot</th><th>Product</th><th>Status</th><th>Wafers</th><th>Average yield</th></tr></thead>
+      <tbody>
+      {% for lot in lots %}
+        <tr><td class="mono">{{ lot.lot_id }}</td><td>{{ lot.product_code }}</td><td><span class="pill">{{ lot.status }}</span></td><td>{{ lot.wafer_count }}</td><td>{{ lot.average_yield_percent }}%</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
