@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Defect Pareto · Manufacturing Analytics{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">PARETO ANALYSIS</p><h1>Separate the vital few from the useful many.</h1><p class="lede">Defect contribution is calculated for the active manufacturing cohort. Use the same filters as Yield Overview to test whether the ranking changes with context.</p></div></section>
+{% include "_filters.html" %}
+<section class="panel"><div class="panel-heading"><div><p class="eyebrow">DEFECT CONTRIBUTION</p><h2>Defect Pareto</h2></div><span class="caption">Bars: count · line: cumulative percentage</span></div><div class="chart-frame tall"><canvas id="paretoChart"></canvas></div></section>
+<section class="panel"><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Defect category</th><th>Count</th><th>Contribution</th><th>Cumulative</th></tr></thead><tbody>{% for row in pareto %}<tr><td>{{ loop.index }}</td><td>{{ row.category }}</td><td>{{ row.count }}</td><td>{{ row.percentage }}%</td><td>{{ row.cumulative_percentage }}%</td></tr>{% else %}<tr><td colspan="5">No inspection defects match this cohort.</td></tr>{% endfor %}</tbody></table></div></section>
+<details class="metric-notes"><summary>Pareto definition</summary><p>Categories are sorted by descending defect count. Contribution equals category defects divided by all classified defects. Cumulative percentage is the running contribution after sorting. Counts describe synthetic inspection classifications and are not die-failure root causes.</p></details>
+{% endblock %}
+{% block scripts %}<script>
+const rows={{ pareto_chart|tojson }}; new Chart(document.getElementById('paretoChart'),{data:{labels:rows.map(x=>x.category),datasets:[{type:'bar',label:'Defect count',data:rows.map(x=>x.count),backgroundColor:'#007b75',yAxisID:'y'},{type:'line',label:'Cumulative %',data:rows.map(x=>x.cumulative_percentage),borderColor:'#e66b55',backgroundColor:'#e66b55',tension:.25,yAxisID:'percentage'}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,grid:{color:'#dce5e1'}},percentage:{position:'right',min:0,max:100,grid:{display:false},ticks:{callback:v=>v+'%'}},x:{grid:{display:false}}}}});
+</script>{% endblock %}

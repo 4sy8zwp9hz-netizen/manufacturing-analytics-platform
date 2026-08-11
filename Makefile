@@ -14,4 +14,4 @@ test:
 
 lint:
 	ruff check .
-
+	ruff format --check .

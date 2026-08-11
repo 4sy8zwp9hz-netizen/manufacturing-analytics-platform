@@ -12,7 +12,9 @@ LOGGER = logging.getLogger(__name__)
 def ensure_demo_data(database: Database, settings: Settings) -> bool:
     """Initialize and populate an empty database. Return True when data was generated."""
     database.initialize()
-    if database.scalar("SELECT COUNT(*) FROM wafers"):
+    wafer_count = database.scalar("SELECT COUNT(*) FROM wafers")
+    die_count = database.scalar("SELECT COUNT(*) FROM die_results")
+    if wafer_count and die_count:
         return False
 
     LOGGER.info("Generating deterministic synthetic manufacturing dataset")
@@ -26,4 +28,3 @@ def ensure_demo_data(database: Database, settings: Settings) -> bool:
     )
     database.replace_dataset(generator.generate())
     return True
-

@@ -2,56 +2,66 @@
 
 ## Context
 
-This repository is a clean-room portfolio project. It contains only fictional names, relationships, rules, and generated data. The first iteration creates stable boundaries before adding sophisticated analytics.
+This clean-room portfolio project contains only fictional names, relationships, rules, and generated data. Phase 2 extends the foundation into a connected investigation workflow without turning routes or templates into analytics engines.
 
 ```mermaid
 flowchart LR
-    Browser["Browser / HTML"] --> Web["Web delivery layer"]
-    Web --> Services["Application services"]
-    Services --> Domain["Domain and synthetic-data logic"]
-    Services --> Repositories["Query repositories"]
-    Repositories --> Database["SQLite adapter"]
-    Generator["Generator CLI"] --> Domain
-    Generator --> Database
-    Config["TOML + environment"] --> Services
+    Browser["Browser / Chart.js / SVG"] --> Web["HTTP + presentation"]
+    Web --> Analytics["Analytics services"]
+    Web --> Bootstrap["Application services"]
+    Analytics --> Domain["Metrics + Pareto logic"]
+    Analytics --> Repositories["Analytics repository"]
+    Bootstrap --> Generator["Synthetic domain generator"]
+    Bootstrap --> Database["SQLite adapter"]
+    Repositories --> Database
+    Config["TOML + environment"] --> Bootstrap
     Config --> Generator
 ```
 
-## Layers and responsibilities
+## Dependency direction
 
 ### Domain
 
-`domain/` owns manufacturing concepts that do not depend on HTTP or SQLite. The synthetic generator lives here because its correlations and constraints describe the fictional manufacturing world. A fixed seed makes failures reproducible.
+`domain/` owns deterministic manufacturing behavior and reusable calculations. Coordinate generation, weighted-yield validation, and Pareto calculations do not import FastAPI, Jinja, or SQLite.
 
 ### Data
 
-`data/` owns schema creation, transactions, loading, and read queries. Raw SQL is intentional in Phase 1: reviewers can see keys, constraints, indexes, joins, and transaction boundaries directly. `Database` is infrastructure; `ManufacturingRepository` expresses queries in application language.
+`data/` owns schema creation, transaction boundaries, loading, and SQL. `AnalyticsRepository` builds filter-aware queries from an allowlisted set of clauses and binds all user values as SQL parameters. It returns records rather than presentation objects.
 
-### Services
+Explicit SQL remains intentional: hiring reviewers can inspect joins, aggregation level, indexes, constraints, and cohort behavior directly. An ORM would add mapping machinery without removing the need to reason carefully about analytical grain.
 
-`services/` coordinates workflows. The bootstrap use case initializes an empty database and generates the demo dataset without putting orchestration in a web route.
+### Analytics
 
-### Web
+`analytics/` defines investigation inputs and metric workflows. `AnalyticsFilters` is the canonical cohort definition. `AnalyticsService` defines weighted yield, distribution bands, the tool-comparison operation, drill-down composition, and lightweight query timing. This is the boundary where multiple repository queries become one use case.
 
-`web/` translates HTTP requests into application calls and renders responses. Routes do not generate data or write SQL. Server-rendered HTML keeps the initial application shell small and accessible; richer client-side visualization can arrive when real interactions exist.
+### Application services
+
+`services/` coordinates startup workflows. Bootstrap initializes an empty schema and rebuilds the deterministic dataset when coordinate data is absent. Generated data is disposable; user data is never managed by this workflow.
+
+### Web and presentation
+
+`web/` handles request parsing, response codes, context serialization, and rendering. Routes do not contain SQL or statistical calculations. Jinja templates render Chart.js comparisons and retain tables for the core drill-down and Pareto outputs. The wafer map is server-rendered SVG because the geometry is small, coordinate-native, inspectable, and interactive without a second application framework.
 
 ### Composition root
 
-`main.py` wires settings, persistence, repositories, lifecycle behavior, and routes. Centralized wiring makes dependencies visible and gives tests a straightforward application factory.
+`main.py` wires settings, persistence, repositories, services, lifecycle behavior, routes, and static assets. Tests can replace only the database path while exercising the same dependency graph used by the application.
 
-## Cross-cutting concerns
+## Metric definitions
 
-- Configuration uses checked-in TOML defaults and narrow environment overrides.
-- Logging is configured once and uses structured, timestamped operational messages.
-- Database loads are transactional; failures roll back rather than leave a partial dataset.
-- Foreign keys, uniqueness constraints, checks, and indexes protect model integrity.
-- Tests use isolated temporary databases and deterministic seeds.
+- **Weighted yield:** sum of passing die divided by sum of tested die for the filtered wafer cohort.
+- **Wafer count:** distinct wafers having a final synthetic yield result in the cohort.
+- **Lot/work-order count:** distinct parent entities represented by those wafers.
+- **Tool comparison:** final wafer yield grouped by exposure to each tool at the selected operation. The default is the fictional etch operation (`OP-400`).
+- **Defect contribution:** classified inspection defects in a category divided by all classified defects in the cohort.
+
+The time filter applies to the final yield-result timestamp. Tool and operation filters mean the wafer had that process exposure; they do not imply that the exposure caused the final outcome.
+
+## Performance and evolution
+
+Every important analytics repository call is timed with `perf_counter` and logged as `analytics_query`. The service retains a bounded in-process diagnostic history for tests and local benchmarking. This is instrumentation, not caching.
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the dataset baseline and optimization candidates. Likely future seams include precomputed time/product/lot aggregates, an external cache, a background refresh worker, and a PostgreSQL adapter. They should be introduced against measured workloads and explicit freshness requirements.
 
 ## Deployment direction
 
-The current process is suitable for local development. A production deployment would run behind a reverse proxy, use an externally managed relational database, generate immutable assets during build, perform migrations separately from startup, and run refresh work in a dedicated worker. Health checks, secrets injection, telemetry, backup policy, and resource limits should be part of that deployment—not afterthoughts in application routes.
-
-## Intended evolution
-
-Interfaces should be added only where a second implementation or testing seam earns them. Likely future boundaries include an analytics query service, cache backend, refresh scheduler, and production database adapter. The repository deliberately avoids introducing those abstractions before their behavior exists.
-
+A production deployment would run behind a reverse proxy, use PostgreSQL and versioned migrations, generate immutable assets during build, run refresh work in a dedicated worker, and inject secrets from the deployment environment. Health/readiness checks, structured JSON logs, metrics, traces, backup policy, resource limits, Content Security Policy, and a locally bundled chart asset should be addressed before an internet-facing deployment.

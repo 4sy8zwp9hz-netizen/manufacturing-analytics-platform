@@ -20,6 +20,7 @@ def database(tmp_path: Path) -> Database:
 
 def test_dataset_round_trip_and_foreign_keys(database: Database) -> None:
     assert database.scalar("SELECT COUNT(*) FROM wafers") == 6
+    assert database.scalar("SELECT COUNT(*) FROM die_results") == 6 * 317
     assert database.scalar("PRAGMA foreign_key_check") is None
 
 
@@ -39,4 +40,3 @@ def test_replace_dataset_is_idempotent(database: Database) -> None:
     ).generate()
     database.replace_dataset(dataset)
     assert database.scalar("SELECT COUNT(*) FROM wafers") == 6
-

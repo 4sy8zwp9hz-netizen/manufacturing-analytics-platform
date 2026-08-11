@@ -47,4 +47,3 @@ def get_settings(config_path: Path | None = None) -> Settings:
         lots_per_work_order=int(synthetic["lots_per_work_order"]),
         wafers_per_lot=int(synthetic["wafers_per_lot"]),
     )
-

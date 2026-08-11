@@ -61,6 +61,7 @@ class SyntheticDataGenerator:
                 "inspections",
                 "inspection_defects",
                 "yield_results",
+                "die_results",
             )
         }
         self._add_reference_data(data)
@@ -144,19 +145,26 @@ class SyntheticDataGenerator:
                                     "inspection_timestamp": self._iso(
                                         event_start + timedelta(minutes=45)
                                     ),
-                                    "sites_inspected": 625,
+                                    "sites_inspected": 317,
                                     "defect_count": defect_total,
                                 }
                             )
                             self._allocate_defects(data, inspection_id, defect_total)
                             inspection_id += 1
 
-                    total_die = 625
-                    yield_rate = min(
+                    target_yield = min(
                         0.995,
-                        max(0.75, 0.948 + lot_shift + wafer_noise + process_tool_effect),
+                        max(0.72, 0.965 + lot_shift + wafer_noise + process_tool_effect),
                     )
-                    good_die = round(total_die * yield_rate)
+                    pattern = self._pattern_for_wafer(wafer_id)
+                    die_rows = self._generate_die_results(
+                        wafer_id=wafer_key,
+                        yield_result_id=yield_id,
+                        target_yield=target_yield,
+                        pattern=pattern,
+                    )
+                    total_die = len(die_rows)
+                    good_die = sum(row["passed"] for row in die_rows)
                     data["yield_results"].append(
                         {
                             "yield_result_id": yield_id,
@@ -168,6 +176,7 @@ class SyntheticDataGenerator:
                             "yield_rate": round(good_die / total_die, 4),
                         }
                     )
+                    data["die_results"].extend(die_rows)
                     wafer_id += 1
                     yield_id += 1
         return data
@@ -211,12 +220,63 @@ class SyntheticDataGenerator:
                 )
 
     @staticmethod
+    def _pattern_for_wafer(wafer_number: int) -> str:
+        if wafer_number % 13 == 0:
+            return "LOCAL_CLUSTER"
+        if wafer_number % 11 == 0:
+            return "EDGE_DEGRADATION"
+        if wafer_number % 7 == 0:
+            return "RANDOM_LOSS"
+        return "UNIFORM"
+
+    def _generate_die_results(
+        self,
+        wafer_id: str,
+        yield_result_id: int,
+        target_yield: float,
+        pattern: str,
+    ) -> list[dict[str, Any]]:
+        """Generate a circular 21x21 map with deterministic fictional spatial effects."""
+        coordinates = [
+            (x, y) for y in range(-10, 11) for x in range(-10, 11) if x * x + y * y <= 100
+        ]
+        cluster_x = self.random.randint(-5, 5)
+        cluster_y = self.random.randint(-5, 5)
+        rows: list[dict[str, Any]] = []
+        for x, y in coordinates:
+            radius = math.sqrt(x * x + y * y) / 10
+            failure_probability = 1 - target_yield
+            failure_bin = "BIN_2_RANDOM"
+
+            if pattern == "EDGE_DEGRADATION" and radius >= 0.72:
+                failure_probability = min(0.72, failure_probability + 0.34)
+                failure_bin = "BIN_3_EDGE"
+            elif pattern == "LOCAL_CLUSTER" and (x - cluster_x) ** 2 + (y - cluster_y) ** 2 <= 10:
+                failure_probability = min(0.82, failure_probability + 0.52)
+                failure_bin = "BIN_4_CLUSTER"
+            elif pattern == "RANDOM_LOSS":
+                failure_probability = min(0.35, failure_probability + 0.07)
+
+            passed = int(self.random.random() >= failure_probability)
+            rows.append(
+                {
+                    "die_result_id": len(rows) + 1 + (yield_result_id - 1) * len(coordinates),
+                    "wafer_id": wafer_id,
+                    "yield_result_id": yield_result_id,
+                    "x_coordinate": x,
+                    "y_coordinate": y,
+                    "passed": passed,
+                    "test_bin": "BIN_1_PASS" if passed else failure_bin,
+                    "test_category": "SYNTHETIC_ELECTRICAL_TEST",
+                }
+            )
+        return rows
+
+    @staticmethod
     def _iso(value: datetime) -> str:
         return value.isoformat(timespec="seconds")
 
 
 def expected_wafer_count(config: GenerationConfig) -> int:
     """Make record-count expectations explicit for tests and operational checks."""
-    return math.prod(
-        (config.work_order_count, config.lots_per_work_order, config.wafers_per_lot)
-    )
+    return math.prod((config.work_order_count, config.lots_per_work_order, config.wafers_per_lot))

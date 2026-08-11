@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Yield Overview · Manufacturing Analytics{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">YIELD OVERVIEW</p><h1>Find the signal. Follow the genealogy.</h1><p class="lede">Start with a cohort, compare performance, then open a lot to investigate its wafers, tools, inspections, and spatial results.</p></div>
+  <span class="data-badge">Deterministic synthetic data</span>
+</section>
+
+{% include "_filters.html" %}
+
+<section class="metrics" aria-label="Filtered yield summary">
+  <article class="accent"><span>Weighted yield</span><strong>{{ "%.2f"|format(model.kpis.overall_yield * 100) }}%</strong><small>Σ good die ÷ Σ tested die</small></article>
+  <article><span>Wafers</span><strong>{{ model.kpis.wafer_count }}</strong><small>Distinct tested wafers</small></article>
+  <article><span>Lots</span><strong>{{ model.kpis.lot_count }}</strong><small>Distinct represented lots</small></article>
+  <article><span>Work orders</span><strong>{{ model.kpis.work_order_count }}</strong><small>Distinct production requests</small></article>
+</section>
+
+<section class="dashboard-grid">
+  <article class="panel chart-wide"><div class="panel-heading"><div><p class="eyebrow">PERFORMANCE</p><h2>Yield trend</h2></div><span class="caption">Weighted daily yield</span></div><div class="chart-frame"><canvas id="trendChart"></canvas></div></article>
+  <article class="panel"><div class="panel-heading"><div><p class="eyebrow">VARIATION</p><h2>Wafer distribution</h2></div><span class="caption">Wafer count by yield band</span></div><div class="chart-frame"><canvas id="distributionChart"></canvas></div></article>
+  <article class="panel"><div class="panel-heading"><div><p class="eyebrow">PRODUCT MIX</p><h2>Product comparison</h2></div><span class="caption">Weighted yield</span></div><div class="chart-frame"><canvas id="productChart"></canvas></div></article>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">DRILL DOWN</p><h2>Lot performance</h2></div><span class="caption">Select a lot to begin an investigation</span></div>
+  <div class="table-wrap"><table><thead><tr><th>Lot</th><th>Wafers</th><th>Weighted yield</th><th>Investigation</th></tr></thead><tbody>
+  {% for row in model.lots %}<tr><td class="mono">{{ row.category }}</td><td>{{ row.wafer_count }}</td><td><span class="yield-value {% if row.yield_percent < 92 %}low{% endif %}">{{ row.yield_percent }}%</span></td><td><a class="table-link" href="/lots/{{ row.category }}{% if filters.query_string %}?{{ filters.query_string }}{% endif %}">Open lot →</a></td></tr>{% else %}<tr><td colspan="4">No wafers match this cohort.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="panel tool-panel">
+  <div class="panel-heading"><div><p class="eyebrow">PROCESS EXPOSURE</p><h2>Tool comparison</h2></div><span class="caption">Wafers processed at {{ model.comparison_operation }} · association, not causation</span></div>
+  <div class="chart-frame short"><canvas id="toolChart"></canvas></div>
+</section>
+
+<details class="metric-notes"><summary>Metric definitions and interpretation</summary><dl><dt>Weighted yield</dt><dd>Total passing die divided by total tested die for wafers in the filtered cohort.</dd><dt>Tool comparison</dt><dd>Final wafer yield grouped by exposure to a tool at the selected operation; it is a screening comparison and does not control for product, time, or other confounders.</dd><dt>Time filter</dt><dd>Applied to the timestamp of the final synthetic wafer-test yield result.</dd></dl></details>
+{% endblock %}
+{% block scripts %}
+<script>
+const colors = {teal:'#007b75', navy:'#17363b', lime:'#b8e15b', coral:'#e66b55', grid:'#dce5e1'};
+Chart.defaults.font.family = 'Inter, ui-sans-serif, system-ui'; Chart.defaults.color = '#617178';
+const chart = (id, type, labels, values, label, options={}) => new Chart(document.getElementById(id), {type, data:{labels,datasets:[{label,data:values,borderColor:colors.teal,backgroundColor:type==='line'?'rgba(0,123,117,.13)':[colors.teal,colors.navy,colors.lime,colors.coral,'#7aa5a1','#b7c9c7'],fill:type==='line',tension:.3,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:colors.grid},...options.y},x:{grid:{display:false}}}}});
+const trend={{ model.trend|tojson }}; chart('trendChart','line',trend.map(x=>x.period),trend.map(x=>x.yield_percent),'Yield %',{y:{min:80,max:100}});
+const distribution={{ model.distribution|tojson }}; chart('distributionChart','bar',distribution.map(x=>x.category),distribution.map(x=>x.count),'Wafers');
+const products={{ model.products|tojson }}; chart('productChart','bar',products.map(x=>x.category),products.map(x=>x.yield_percent),'Yield %',{y:{min:80,max:100}});
+const tools={{ model.tools|tojson }}; chart('toolChart','bar',tools.map(x=>x.category),tools.map(x=>x.yield_percent),'Yield %',{y:{min:80,max:100}});
+</script>
+{% endblock %}

@@ -20,6 +20,7 @@ LOAD_ORDER = (
     "inspections",
     "inspection_defects",
     "yield_results",
+    "die_results",
 )
 
 
@@ -70,8 +71,6 @@ class Database:
             row = connection.execute(query, parameters).fetchone()
             return None if row is None else row[0]
 
-    def fetch_all(
-        self, query: str, parameters: Sequence[Any] = ()
-    ) -> list[dict[str, Any]]:
+    def fetch_all(self, query: str, parameters: Sequence[Any] = ()) -> list[dict[str, Any]]:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute(query, parameters).fetchall()]

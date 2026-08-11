@@ -87,9 +87,21 @@ CREATE TABLE IF NOT EXISTS yield_results (
     UNIQUE (wafer_id, operation_code)
 );
 
+CREATE TABLE IF NOT EXISTS die_results (
+    die_result_id INTEGER PRIMARY KEY,
+    wafer_id TEXT NOT NULL REFERENCES wafers(wafer_id),
+    yield_result_id INTEGER NOT NULL REFERENCES yield_results(yield_result_id),
+    x_coordinate INTEGER NOT NULL,
+    y_coordinate INTEGER NOT NULL,
+    passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+    test_bin TEXT NOT NULL,
+    test_category TEXT NOT NULL,
+    UNIQUE (wafer_id, x_coordinate, y_coordinate)
+);
+
 CREATE INDEX IF NOT EXISTS idx_lots_work_order ON lots(work_order_id);
 CREATE INDEX IF NOT EXISTS idx_wafers_lot ON wafers(lot_id);
 CREATE INDEX IF NOT EXISTS idx_wafer_operations_tool ON wafer_operations(tool_id, operation_code);
 CREATE INDEX IF NOT EXISTS idx_inspections_wafer ON inspections(wafer_id);
 CREATE INDEX IF NOT EXISTS idx_yield_timestamp ON yield_results(measured_timestamp);
-
+CREATE INDEX IF NOT EXISTS idx_die_results_wafer ON die_results(wafer_id, y_coordinate, x_coordinate);

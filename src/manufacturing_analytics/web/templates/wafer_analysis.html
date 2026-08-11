@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Wafer Analysis · Manufacturing Analytics{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">WAFER ANALYSIS</p><h1>Move from cohort variation to spatial evidence.</h1><p class="lede">Lower-yield wafers are listed first. Open a wafer to inspect its coordinate map, process genealogy, tool exposure, and defect context.</p></div></section>
+{% include "_filters.html" %}
+<section class="wafer-grid">
+{% for wafer in wafers %}
+  <a class="wafer-card" href="/wafers/{{ wafer.wafer_id }}{% if filters.query_string %}?{{ filters.query_string }}{% endif %}">
+    <div class="mini-wafer"><span>{{ wafer.wafer_number }}</span></div>
+    <div><p class="mono">{{ wafer.wafer_id }}</p><strong class="{% if wafer.yield_percent < 92 %}low-text{% endif %}">{{ wafer.yield_percent }}%</strong><small>{{ wafer.lot_id }} · {{ wafer.product_code }}</small></div><span class="arrow">→</span>
+  </a>
+{% else %}<div class="empty-state">No wafers match the selected cohort.</div>{% endfor %}
+</section>
+{% endblock %}
