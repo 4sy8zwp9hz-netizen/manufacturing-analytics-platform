@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Yield Dashboard</a><span>/</span><span>{{ model.wafer.canonical_wafer_id }}</span>
+</div>
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">CANONICAL IDENTITY + LINEAGE</p>
+    <h1>{{ model.wafer.canonical_wafer_id }}</h1>
+    <p class="lede">{{ model.wafer.canonical_work_order_id }} → {{ model.wafer.canonical_lot_id }} → {{ model.wafer.canonical_wafer_id }}</p>
+  </div>
+  <span class="data-badge">{{ model.wafer.completion_status }}</span>
+</section>
+<section class="panel">
+  <div class="panel-heading">
+    <div><p class="eyebrow">SOURCE TRACE</p><h2>Analytical record to fictional source record</h2></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Stage</th><th>Unit</th><th>Result</th><th>Source</th><th>Source key</th><th>Reconciliation</th><th>Transformation</th></tr></thead>
+      <tbody>
+      {% for row in model.records %}
+        <tr>
+          <td>{{ row.stage_code }}</td><td class="mono">{{ row.unit_key }}</td>
+          <td>{{ 'GOOD' if row.is_good else 'FAIL' }}{% if not row.is_denominator %} · EXCLUDED{% endif %}</td>
+          <td>{{ row.source_system }}.{{ row.source_table }}</td>
+          <td class="mono">{{ row.source_record_key }}</td>
+          <td>{{ row.reconciliation_method }}</td><td>{{ row.transformation_note }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

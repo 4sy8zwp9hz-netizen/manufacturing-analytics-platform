@@ -12,8 +12,9 @@ def test_landing_page_and_health_check(tmp_path: Path) -> None:
         health = client.get("/health")
 
     assert response.status_code == 200
-    assert "From factory context" in response.text
-    assert health.json() == {"status": "ok"}
+    assert "Trace yield from metric to source" in response.text
+    assert health.json()["status"] == "ok"
+    assert health.json()["generation_id"].startswith("gen-")
 
 
 def test_unknown_analytics_page_returns_404(tmp_path: Path) -> None:
@@ -67,3 +68,22 @@ def test_phase_three_routes_and_local_chart_asset(tmp_path: Path) -> None:
     assert operations.status_code == 200 and "OBSERVED THROUGHPUT" in operations.text
     assert quality.status_code == 200 and "Watermarks" in quality.text
     assert chart_asset.status_code == 200 and len(chart_asset.content) > 100_000
+
+
+def test_yield_platform_population_lineage_and_export_routes(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "platform.db")
+    with TestClient(app) as client:
+        dashboard = client.get("/analytics/yield-dashboard?product=ORION-A&time_grain=week")
+        population = client.get("/platform/population?stage=CHIP_TEST&product=ORION-A")
+        export = client.get("/platform/population?stage=CHIP_TEST&format=csv")
+        wafer = client.get("/platform/wafers/WAF-000001")
+        generation = client.get("/platform/generation")
+
+    assert dashboard.status_code == 200 and "Rolled production yield" in dashboard.text
+    assert "Chip-test yield by week" in dashboard.text
+    assert "Inspect every denominator" in dashboard.text
+    assert population.status_code == 200 and "DENOMINATOR INSPECTION" in population.text
+    assert export.status_code == 200 and export.headers["content-type"].startswith("text/csv")
+    assert wafer.status_code == 200 and "SOURCE TRACE" in wafer.text
+    assert generation.status_code == 200 and "Source watermarks" in generation.text
+    assert "Warnings and quarantines" in generation.text

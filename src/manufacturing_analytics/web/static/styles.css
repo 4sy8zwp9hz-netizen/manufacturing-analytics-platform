@@ -134,3 +134,8 @@ th { color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform
 .severity.high { color: #8e2d20; background: #f9ded9; }
 .severity.medium { color: #78580d; background: #f7ebc8; }
 .severity.low { color: #266847; background: #e3f4e7; }
+.generation-badge { max-width: 260px; padding: 14px 16px; color: #c9d7d5; background: var(--nav); border-radius: 9px; }
+.generation-badge { text-decoration: none; }
+.generation-badge strong, .generation-badge span { display: block; }
+.generation-badge strong { overflow-wrap: anywhere; color: white; font: 11px ui-monospace, monospace; }
+.generation-badge span { margin-top: 5px; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }

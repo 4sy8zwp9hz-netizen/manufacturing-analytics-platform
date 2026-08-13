@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from manufacturing_analytics.analytics.models import AnalyticsFilters
 from manufacturing_analytics.analytics.process_service import ProcessAnalyticsService
 from manufacturing_analytics.analytics.service import AnalyticsService
 from manufacturing_analytics.data.analytics_repository import AnalyticsRepository
-from manufacturing_analytics.data.repositories import ManufacturingRepository
 
 TEMPLATES = Jinja2Templates(directory=Path(__file__).with_name("templates"))
 router = APIRouter()
@@ -58,13 +57,103 @@ def _process_analytics(request: Request) -> ProcessAnalyticsService:
     return request.app.state.process_analytics
 
 
+def _platform_filters(
+    product: str | None = None,
+    work_order: str | None = None,
+    wafer: str | None = None,
+    period: str | None = None,
+) -> dict[str, str | None]:
+    return {"product": product, "work_order": work_order, "wafer": wafer, "period": period}
+
+
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request) -> HTMLResponse:
-    repository: ManufacturingRepository = request.app.state.repository
+    filters = _platform_filters()
     return TEMPLATES.TemplateResponse(
         request=request,
         name="index.html",
-        context={"summary": repository.summary(), "lots": repository.recent_lots()},
+        context={"model": request.app.state.yield_platform.dashboard(filters), "filters": filters},
+    )
+
+
+@router.get("/analytics/yield-dashboard", response_class=HTMLResponse)
+def yield_dashboard(
+    request: Request,
+    product: str | None = None,
+    work_order: str | None = None,
+    wafer: str | None = None,
+    period: str | None = None,
+    time_grain: str = "month",
+) -> HTMLResponse:
+    filters = _platform_filters(product, work_order, wafer, period)
+    if time_grain not in {"date", "week", "month"}:
+        raise HTTPException(status_code=422, detail="time_grain must be date, week, or month")
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "model": request.app.state.yield_platform.dashboard(filters, time_grain),
+            "filters": filters,
+        },
+    )
+
+
+@router.get("/platform/population", response_class=HTMLResponse)
+def analytical_population(
+    request: Request,
+    stage: str,
+    product: str | None = None,
+    work_order: str | None = None,
+    wafer: str | None = None,
+    period: str | None = None,
+    format: str | None = None,
+) -> Response:
+    filters = _platform_filters(product, work_order, wafer, period)
+    rows = request.app.state.yield_platform.repository.population(stage, filters)
+    if format == "csv":
+        import csv
+        import io
+
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        return Response(
+            output.getvalue(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{stage.lower()}-population.csv"'
+            },
+        )
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="analytical_population.html",
+        context={"stage": stage, "rows": rows, "filters": filters},
+    )
+
+
+@router.get("/platform/wafers/{wafer_id}", response_class=HTMLResponse)
+def platform_wafer_trace(request: Request, wafer_id: str) -> HTMLResponse:
+    model = request.app.state.yield_platform.repository.wafer_trace(wafer_id)
+    if model is None:
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="not_found.html",
+            context={"entity": "canonical wafer", "identifier": wafer_id},
+            status_code=404,
+        )
+    return TEMPLATES.TemplateResponse(
+        request=request, name="platform_wafer.html", context={"model": model}
+    )
+
+
+@router.get("/platform/generation", response_class=HTMLResponse)
+def generation_detail(request: Request) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="generation_detail.html",
+        context={"metadata": request.app.state.yield_platform.repository.metadata()},
     )
 
 
@@ -225,4 +314,5 @@ def placeholder(request: Request, page: str) -> HTMLResponse:
 @router.get("/health")
 def health(request: Request) -> dict[str, str]:
     request.app.state.database.scalar("SELECT 1")
-    return {"status": "ok"}
+    generation_id = request.app.state.generation_store.current_generation_id()
+    return {"status": "ok", "generation_id": generation_id or "unavailable"}

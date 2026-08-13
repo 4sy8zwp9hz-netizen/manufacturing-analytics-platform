@@ -1,63 +1,75 @@
-# Synthetic data model
+# Data model
 
-The model represents a simplified wafer-manufacturing genealogy. It is entirely fictional and is not derived from an employer, fab, product, MES, test, or inspection system.
+## Source models
+
+The project intentionally has no universal source primary key.
+
+| Source | Key examples | Grain |
+| --- | --- | --- |
+| Genealogy | alias type + alias value | alias-to-canonical mapping |
+| MES | event key; lot + wafer; optional substrate | process event |
+| Wafer inspection | inspection record + revision | wafer observation |
+| Chip test | measurement key; device + coordinates | die test |
+| Sorting | order + wafer sequence + device | die parameter |
+| Qualification | qualification record; lot + wafer | sampled context |
+
+## Canonical identity
 
 ```mermaid
 erDiagram
-    WORK_ORDERS ||--o{ LOTS : authorizes
-    LOTS ||--o{ WAFERS : contains
-    WAFERS ||--o{ WAFER_OPERATIONS : follows
-    OPERATIONS ||--o{ WAFER_OPERATIONS : defines
-    TOOLS ||--o{ WAFER_OPERATIONS : processes
-    WAFERS ||--o{ INSPECTIONS : receives
-    OPERATIONS ||--o{ INSPECTIONS : occurs_at
-    TOOLS ||--o{ INSPECTIONS : measures
-    INSPECTIONS ||--o{ INSPECTION_DEFECTS : classifies
-    DEFECT_CATEGORIES ||--o{ INSPECTION_DEFECTS : categorizes
-    WAFERS ||--o{ YIELD_RESULTS : produces
-    OPERATIONS ||--o{ YIELD_RESULTS : measures_at
-    YIELD_RESULTS ||--|{ DIE_RESULTS : aggregates
-    WAFERS ||--|{ DIE_RESULTS : maps
-    OPERATIONS ||--o{ MEASUREMENT_CHARACTERISTICS : defines
-    MEASUREMENT_CHARACTERISTICS ||--o{ PROCESS_MEASUREMENTS : types
-    WAFERS ||--o{ PROCESS_MEASUREMENTS : receives
-    TOOLS ||--o{ PROCESS_MEASUREMENTS : measures
+    WORK_ORDER ||--o{ LOT : contains
+    LOT ||--o{ WAFER : contains
+    WAFER ||--o{ DIE : contains
+    SOURCE_ALIAS }o--|| WAFER : resolves_to
+    WAFER ||--o{ STAGE_POPULATION : contributes
+    STAGE_POPULATION ||--|{ ANALYTICAL_LINEAGE : traced_by
 ```
 
-## Entity intent
+`canonical_wafers` materializes work order, lot, wafer, product, analytical period, route-completion state, and production eligibility. Die identity remains in each stage row's unit key because not every source supplies the same device identifier.
 
-- **Work orders** describe an authorized quantity for a fictional product.
-- **Lots** are processing groups assigned to a work order and route.
-- **Wafers** are the primary traceable units within a lot.
-- **Operations** define the ordered manufacturing route.
-- **Tools** identify equipment capable of a tool-group function.
-- **Wafer operations** record wafer-level processing history and tool traceability.
-- **Inspections** summarize a measurement event at an operation and tool.
-- **Inspection defects** break inspections down by fictional defect classification.
-- **Yield results** store aggregate good die, tested die, and wafer-level weighted yield.
-- **Die results** store unique wafer coordinates, pass/fail status, and a fictional test bin. Each row references both its wafer and aggregate yield result.
-- **Measurement characteristics** define a fictional continuous metric, unit, operation, and optional engineering specification limits.
-- **Process measurements** store time-ordered wafer values, measurement timestamps, tool exposure, and source-arrival timestamps.
-- **Source watermarks** describe the latest source state incorporated, the observation time, row count, and source-specific lag objective.
-- **Data-quality issues** retain severity, affected entity, detection time, and human-readable evidence for synthetic completeness, sequence, latency, duplication, measurement, and freshness findings.
+## Analytical generation
 
-## Integrity rules
+### `generation_metadata`
 
-The SQLite schema enforces parent relationships, unique wafer coordinates, unique route events, valid pass/fail values, non-negative counts, and yields between zero and one. The generator calculates `yield_results.good_die` directly from the coordinate rows; it does not independently invent an aggregate that could disagree with the map.
+One record identifies the immutable generation, refresh start/end, validation/publication state, and warning count.
 
-The default 21-by-21 coordinate grid includes points inside a radius of ten, producing 317 tested sites per wafer. With 60 wafers, the representative dataset contains 19,020 coordinate results.
+### `source_watermarks`
 
-The default dataset also contains 178 process measurements across three fictional characteristics. One intentionally omitted characteristic result and one intentionally omitted route event make completeness behavior testable.
+Records the source name, physical synthetic file, and extracted row count. A production adapter would add source-native change sequence or maximum arrival timestamp.
 
-## Embedded fictional signals
+### `canonical_wafers`
 
-The generator uses a configured pseudo-random seed, so every signal is reproducible. A small subset of wafers receives one of these teaching patterns:
+One canonical wafer with its hierarchy and population eligibility.
 
-- elevated failures near the wafer edge;
-- a localized failure cluster;
-- increased spatially random loss;
-- approximately uniform high yield.
+### `stage_population`
 
-The fictional `ETCH-02` exposure also introduces a modest yield penalty. Lot and wafer noise prevent every comparison from looking mechanically perfect. These effects create hypotheses worth investigating; they are not claims about real semiconductor processes, and correlation in the dashboard does not establish causation.
+One analytical unit for a stage. Key semantics:
 
-Continuous measurements add independently fictional stable common-cause variation, a temporary mean shift, increased variation on one tool/time cohort, a tool offset with gradual drift, delayed arrivals, and one isolated special-cause outlier. The values and specification limits are teaching constructs, not process recipes or real engineering requirements.
+- `population_unit`: wafer, die, or sample grain.
+- `is_denominator`: whether the unit participates in that stage yield.
+- `is_good`: outcome; meaningful independently of exclusion for audit.
+- `failure_family`: canonical classification assigned by transformation.
+- `exclusion_reason`: why a visible record did not enter production yield.
+- coordinates: populated for die-level mapping where available.
+
+Stage yield is always `SUM(is_good WHERE is_denominator) / SUM(is_denominator)` within one stage. Rolled yield multiplies conditional stage yields; it never sums unlike grains.
+
+### `analytical_lineage`
+
+Links an analytical record to its fictional source system/table/key plus reconciliation and transformation explanations. The current model emits one lineage record per population record, while the schema supports multiple contributors.
+
+### `transformation_issues`
+
+Captures source key, issue type, disposition, and evidence. Records may be resolved with fallback, superseded, included with warning, or quarantined.
+
+## Example identity paths
+
+```text
+MES: SUB-700001                 ─┐
+Wafer inspection: WI-LOT...-01 ─┤
+Chip test: SUB-700001           ├→ WAF-000001 → LOT-001-01 → WO-001
+Sorting: WO-001 + sequence 1    ─┤
+Qualification: LOT-001-01 + 1   ─┘
+```
+
+The mapping is synthetic and exists to teach reconciliation behavior, not to imitate any production naming convention.

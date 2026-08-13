@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "manufacturing-analytics-platform"
-version = "0.3.0"
-description = "A production-style semiconductor manufacturing analytics portfolio built with synthetic data."
+version = "0.4.0"
+description = "A synthetic multi-source semiconductor manufacturing yield data platform."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -28,6 +28,7 @@ dev = [
 manufacturing-analytics = "manufacturing_analytics.main:run"
 generate-manufacturing-data = "manufacturing_analytics.scripts.generate_data:main"
 benchmark-manufacturing-analytics = "manufacturing_analytics.scripts.benchmark_queries:main"
+benchmark-yield-pipeline = "manufacturing_analytics.scripts.benchmark_pipeline:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/manufacturing_analytics"]

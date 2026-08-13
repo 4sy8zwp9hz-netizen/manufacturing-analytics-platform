@@ -17,5 +17,5 @@ Thumbs.db
 # Generated, reproducible local artifacts
 data/*.db
 data/*.sqlite*
+data/yield_platform/
 logs/
-

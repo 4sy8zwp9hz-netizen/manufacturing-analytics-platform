@@ -1,206 +1,143 @@
 # Manufacturing Analytics Platform
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-007b75.svg)](LICENSE)
+A synthetic semiconductor manufacturing data platform that integrates multiple heterogeneous production systems into a continuously refreshed analytical model used by an interactive yield-investigation application.
 
-A production-style Python investigation tool for semiconductor manufacturing analytics using **entirely synthetic data**.
+Every system, identifier, distribution, process name, rule, screenshot, and record in this repository is fictional. The implementation is clean-room and contains no employer code, schemas, SQL, credentials, business rules, or production data.
 
-> **Clean-room portfolio project:** no proprietary source code, company schemas, table names, credentials, business rules, or production data are used or referenced. Every identifier, relationship, distribution, spatial pattern, and process effect is fictional.
+## The problem
 
-## The manufacturing problem
+A useful yield application cannot repeatedly reconstruct manufacturing truth from operational systems every time a user changes a filter. Those systems have different identifiers, grains, clocks, revisions, and purposes. This project treats the dashboard as the consumer of a data platform:
 
-A yield number is only the start of an investigation. An engineer needs to define the affected cohort, identify degraded lots, compare individual wafers, inspect spatial signatures, trace operation and tool history, and use defects as supporting context.
-
-This project implements that connected path:
-
-```text
-Yield signal → filtered cohort → lot → wafer map → process genealogy → tool comparison → defect Pareto
+```mermaid
+flowchart LR
+    MES["MES / process history"] --> ING["Source-specific ingestion"]
+    WI["Wafer inspection"] --> ING
+    CT["Chip test"] --> ING
+    ST["Sorting / parameters"] --> ING
+    QL["Qualification"] --> ING
+    ID["Genealogy lookup"] --> ING
+    ING --> REC["Identity reconciliation"]
+    REC --> ETL["ETL + manufacturing rules"]
+    ETL --> VAL["Validation + quarantine"]
+    VAL --> CAN["Canonical analytical model"]
+    CAN --> GEN["Immutable generation"]
+    GEN --> PUB["Atomic CURRENT pointer"]
+    PUB --> UI["Yield Dashboard"]
 ```
 
-Phase 3 extends that coherent workflow from yield investigation into process behavior, SPC evidence, operational flow, and data trust. Filter and service models keep every page aligned on explicit cohorts and definitions.
+Normal dashboard interaction opens only the latest immutable analytical generation in read-only mode. Source extraction and manufacturing transformation occur during refresh, not during HTTP requests.
 
-## Investigation experience
+![Multi-source yield dashboard](docs/screenshots/yield-data-platform.png)
 
-### Yield Overview
+## What the platform demonstrates
 
-![Yield Overview showing KPIs, filters, trend, distribution, and lot comparison](docs/screenshots/yield-overview.png)
+- Six separate SQLite source systems with deliberately different schemas and data grains
+- Substrate aliases, inspection aliases, and composite work-order/lot + wafer identities
+- Explicit resolved, unresolved, ambiguous, and fallback reconciliation outcomes
+- Duplicate records, late arrivals, revised results, missing identifiers, incomplete routes, inconsistent date formats, and non-production populations
+- Configuration-driven process-family, failure-family, completion, specification, and exclusion rules
+- Wafer- and die-grain denominators that are never silently pooled
+- Immutable analytical generations, source watermarks, validation metadata, and atomic publication
+- Known-good fallback when a refresh fails
+- Metric → population → wafer/die → synthetic source-record lineage
+- Date/week/month trends, stage yields, Pareto and outlier analysis, wafer drill-down, CSV population export, and generation inspection
+- Supporting wafer maps, SPC, operations, query instrumentation, tests, logging, and CI retained from earlier iterations
 
-Weighted yield, cohort counts, time trend, wafer distribution, lot and product comparisons, and operation-aware tool comparison. Product, work-order, lot, date, operation, and tool filters use parameterized analytics queries.
+## Synthetic sources
 
-### Lot investigation
+| Source | Grain | Native identity | Intentional teaching cases |
+| --- | --- | --- | --- |
+| MES | Process event | lot + wafer, sometimes substrate | missing substrate, incomplete route, naming variants |
+| Wafer inspection | Wafer observation | inspection alias | duplicate and revised inspection, non-ISO dates, unresolved alias |
+| Chip test | Die result | substrate + device | late arrival, die-level failures |
+| Sorting | Die parameter | work order + wafer sequence + device | specification-based pass/fail |
+| Qualification | Sample result | lot + wafer | retained context excluded from production yield |
+| Genealogy | Alias mapping | heterogeneous aliases | composite resolution and ambiguous alias example |
 
-![Lot investigation showing individual wafers and process genealogy](docs/screenshots/lot-investigation.png)
+The adapters in `pipeline/sources.py` know only their own source. No cross-source mega-query exists.
 
-Selecting a lot preserves the investigation context and exposes individual wafer yield, inspection counts, operation/tool history, and the lot defect mix.
+## Manufacturing transformations
 
-### Wafer map
+Fictional rules in `config/transformation_rules.toml` demonstrate domain decisions rather than generic joins:
 
-![Interactive coordinate-level pass/fail wafer map](docs/screenshots/wafer-map.png)
+- Normalize `ETCH-A` and `ETCH ALPHA` into one process family.
+- Require the configured final process family for production completion.
+- Retain the latest inspection revision and classify the earlier row as superseded.
+- Map source failure codes and labels into canonical failure families.
+- Apply wafer-inspection acceptance at wafer grain and parameter limits at die grain.
+- Exclude incomplete wafers from downstream production denominators.
+- Retain qualification records for context while excluding them from production yield.
+- Assign a normalized analytical month and preserve the source record behind every output row.
 
-Each wafer contains 317 unique coordinate results. The interactive SVG map exposes pass/fail status and fictional test bin while the adjacent genealogy connects the wafer to the tools used.
+The headline rolled yield is the product of conditional stage yields. It is not a ratio formed by mixing wafer and die records.
 
-### Defect Pareto
+## Analytical generations and failure recovery
 
-![Defect Pareto with contribution and cumulative percentage](docs/screenshots/pareto-analysis.png)
+A refresh extracts every source, reconciles identities, transforms records, builds the canonical population, writes lineage and quality dispositions, validates the database, and only then publishes it. Generation databases are immutable. Publication renames the completed file and atomically replaces a small `CURRENT` pointer.
 
-The filter-aware Pareto combines classified defect counts, percentage contribution, and cumulative percentage. Statistical calculations live in the domain layer and have focused unit tests.
+If extraction, reconciliation, transformation, loading, or validation fails, the building file is removed and `CURRENT` remains unchanged. Readers continue to serve the previous known-good generation.
 
-### Process / SPC
+The included `ScheduledRefresh` is a testable scheduling seam. A production deployment would call the same idempotent pipeline from a dedicated worker or platform scheduler, never from a user filter request.
 
-![Individuals and Moving Range process-monitoring workflow](docs/screenshots/process-spc.png)
-
-Time-ordered continuous measurements, explicit behavior-based control limits, separate engineering specification limits, moving ranges, tool stratification, and point-level evidence for three documented SPC rules.
-
-### Manufacturing Operations
-
-![Manufacturing cycle, queue, route, and throughput investigation](docs/screenshots/manufacturing-operations.png)
-
-Cycle time, queue time, route elapsed time, observed completions, and wafer/lot drill-down are calculated directly from fictional event timestamps. Utilization is deliberately omitted because no capacity calendar exists.
-
-### Data Quality
-
-![Data-quality findings and source watermarks](docs/screenshots/data-quality.png)
-
-Missing, duplicate, delayed, out-of-sequence, missing-measurement, and stale-source scenarios are visible alongside source-specific freshness objectives and watermarks.
-
-## Investigation Walkthrough
-
-One fictional walkthrough using the configured seed:
-
-1. Open **Yield Overview** and note the weighted baseline and wafer-yield distribution.
-2. Compare lots and open `LOT-0103`, a cohort containing visibly lower-yield wafers.
-3. Select `WFR-00011`; the wafer map makes its edge-heavy failure signature visually apparent.
-4. Review the wafer genealogy, then return to the overview and compare tools at `OP-400`.
-5. Observe that the synthetic `ETCH-02` cohort trends lower than `ETCH-01`, then use product, time, and lot filters to see whether the association persists.
-6. Check the Pareto and inspection context to prioritize follow-up—not to declare root cause.
-
-This sequence supports a hypothesis about a fictional process/tool relationship. It does **not** prove causation. A real investigation would check confounding, sampling, metrology, maintenance history, temporal ordering, repeatability, and designed experiments.
-
-## SPC Investigation Walkthrough
-
-1. Open **Process / SPC** for fictional etch depth. The aggregate series remains mostly inside its broad fictional specifications and can initially look reasonable.
-2. Compare the tool strata: `ETCH-02` has a higher mean and substantially more rule signals than `ETCH-01`.
-3. Filter to `ETCH-02`. The time-ordered series exposes its deterministic offset and gradual drift without mixing the more stable tool into the estimate.
-4. Review the triggered rule, its exact evidence window, wafer, timestamp, and value. No opaque process-health score is used.
-5. Open the affected wafer and lot to inspect manufacturing genealogy and neighboring evidence.
-6. Treat the result as a process signal requiring engineering investigation—not automatic proof that the tool caused the measurement behavior.
-
-A real response would validate the measurement system, sampling plan, maintenance and recipe history, material/product mix, autocorrelation, and the appropriateness of the Phase I limit-estimation window.
-
-## Architecture
-
-- **Domain:** deterministic process behavior, I/MR limits, control rules, operations math, freshness, yield, and Pareto calculations
-- **Data:** relational schema, process measurements, watermarks, transactions, parameterized analytics SQL, and indexes
-- **Analytics:** canonical cohorts, SPC/operations/quality workflows, metric definitions, and timing
-- **Services:** safe local bootstrap of reproducible generated data
-- **Web:** HTTP validation, status codes, context serialization, and presentation
-- **Composition:** explicit startup wiring and application lifecycle
-
-Routes contain no SQL; templates calculate no manufacturing statistics. See [ARCHITECTURE.md](ARCHITECTURE.md), [DATA_MODEL.md](docs/DATA_MODEL.md), and [PERFORMANCE.md](docs/PERFORMANCE.md).
-
-## Technology stack
-
-| Concern | Choice | Rationale |
-| --- | --- | --- |
-| Runtime | Python 3.11+ | Type hints, `tomllib`, broad deployment support |
-| Web | FastAPI + Jinja2 | Testable application factory without a frontend build system |
-| Charts | Locally bundled Chart.js 4 | Reproducible interactive comparisons without third-party runtime requests |
-| Wafer map | Server-rendered SVG | Coordinate-native, inspectable, and lightweight interaction |
-| Storage | SQLite + explicit SQL | Zero-service setup and transparent relational/query design |
-| Tests | pytest + HTTPX | Isolated behavior and end-to-end route validation |
-| Quality | Ruff | Consolidated linting and import checks |
-| CI | GitHub Actions | Python 3.11/3.12 lint, tests, and generator exercise |
-
-## Synthetic data model
+## Repository structure
 
 ```text
-Work order → lot → wafer → operation/tool history
-                    ├── inspection → classified defects
-                    ├── yield result → coordinate-level die results
-                    └── process measurement → characteristic + specification
-Source watermark → freshness state
-Quality finding → affected wafer/source + evidence
+config/                         Transformation and generation configuration
+src/manufacturing_analytics/
+  pipeline/                     Source adapters, identity, ETL, generations
+  data/                         Read-only analytical and legacy repositories
+  analytics/                    Dashboard use-case orchestration
+  domain/                       Synthetic generation, statistics, SPC
+  services/                     Application bootstrap boundaries
+  web/                          FastAPI routes, templates, local assets
+  scripts/                      Data generation and staged benchmarks
+tests/                          Behavioral and component tests
+docs/                           Architecture, model, walkthrough, performance
 ```
 
-The generator embeds deterministic spatial signatures plus stable variation, tool offset, mean shift, drift, increased variation, and an isolated process outlier. Aggregate yield is calculated from coordinate results, preventing disagreement between the KPI and wafer map.
+## Technology choices
 
-## Quick start
+- **Python 3.11+** for the application and pipeline
+- **SQLite** for separate synthetic sources and immutable analytical generations
+- **FastAPI + Jinja2** for a small server-rendered investigation interface
+- **Chart.js**, bundled locally, for interactive charts
+- **pytest** and **Ruff** for behavioral tests and static quality gates
+- **GitHub Actions** for continuous integration
+
+SQLite is deliberate here: separate files make system ownership and atomic generation publication visible, require no external service, and keep the portfolio reproducible. DuckDB/Parquet would become attractive when columnar scans, partitioned generations, or substantially larger populations justify another runtime dependency.
+
+## Run locally
 
 ```bash
 python -m venv .venv
-```
-
-Activate the environment, then:
-
-```bash
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 python -m pip install -e ".[dev]"
-python -m manufacturing_analytics.scripts.generate_data
 uvicorn manufacturing_analytics.main:app --reload
 ```
 
-Open <http://127.0.0.1:8000/analytics/yield-overview>.
-
-Run quality checks and the timing baseline:
+Open `http://127.0.0.1:8000`. The first startup creates the source files and publishes a generation under `data/yield_platform/`; all artifacts are deterministic and ignored by Git.
 
 ```bash
-pytest --cov=manufacturing_analytics --cov-report=term-missing
+pytest
 ruff check .
-python -m manufacturing_analytics.scripts.benchmark_queries
+ruff format --check .
+python -m manufacturing_analytics.scripts.benchmark_pipeline
 ```
 
-## Metric definitions
+## Investigation workflow
 
-| Metric | Definition |
-| --- | --- |
-| Weighted yield | Sum of passing die ÷ sum of tested die in the filtered cohort |
-| Wafer count | Distinct wafers with a final synthetic yield result |
-| Lot/work-order count | Distinct parent entities represented by filtered wafers |
-| Tool comparison | Final wafer yield grouped by tool exposure at one operation |
-| Defect contribution | Category count ÷ all classified inspection defects in the cohort |
-| Individuals limits | Center ± 3 × MR̄/1.128 for time-ordered individual values |
-| Specification limits | Fictional externally defined engineering requirements, never control limits |
-| Cycle time | Event end timestamp − event start timestamp |
-| Queue time | Next event start − previous event end for one wafer |
-| Freshness | Observation timestamp − published source watermark |
+1. Filter the Yield Dashboard by analytical month, product, work order, or wafer and choose date/week/month trend aggregation.
+2. Compare stage yields without mixing their population grains.
+3. Inspect the failure-family Pareto and chip-test trend.
+4. Open a stage to inspect or export its precise denominator.
+5. Open a canonical wafer to see source-system keys and transformation notes.
+6. Open the generation badge to inspect watermarks, row counts, warnings, and dispositions.
 
-The time filter uses the final yield timestamp. Tool comparisons are screening views and do not control automatically for product, time, route, or other confounders.
+See [the end-to-end wafer walkthrough](docs/PIPELINE_WALKTHROUGH.md), [architecture](ARCHITECTURE.md), [data model](docs/DATA_MODEL.md), [measured performance](docs/PERFORMANCE.md), and [roadmap](ROADMAP.md).
 
-## Configuration
+## Scope and limitations
 
-Defaults live in `config/default.toml`. `MAP_ENVIRONMENT`, `MAP_DATABASE_PATH`, and `MAP_LOG_LEVEL` provide operational overrides. Generator size and seed remain explicit, checked-in inputs. Generated databases are ignored because they are reproducible artifacts.
+This is a portfolio-scale reference implementation, not a fab execution system. It uses local files, one refresh process, modest synthetic volumes, and simplified fictional yield rules. It does not claim equipment utilization, causal failure attribution, real-time ingestion, or production-grade distributed coordination. Those omissions are documented design boundaries rather than hidden assumptions.
 
-## Testing strategy
-
-Tests validate deterministic process and coordinate output, control limits, moving ranges, three SPC rules and evidence, rational subgroup validation, tool drift/stratification, cycle and queue calculations, event completeness and ordering, source freshness, relational integrity, filters, drill-down models, local assets, HTTP errors, and rendered routes.
-
-## Tradeoffs and limitations
-
-- SQLite optimizes local reproducibility, not concurrent analytical workloads.
-- Chart.js is pinned and bundled locally with its license; an internet-facing deployment should still apply a Content Security Policy.
-- Server-rendered SVG is ideal for 317 sites but dense maps may need canvas/WebGL or aggregation.
-- Tool comparisons show association and can be confounded; they are not causal models.
-- Inspection defects provide investigation context but are not asserted to cause electrical failures.
-- In-process timing establishes a baseline but is not distributed observability.
-- I/MR limits assume a meaningful time order and use moving ranges of two; autocorrelation, non-normality, mixed distributions, or unstable Phase I data can make the limits misleading.
-- No cache or precomputed table is added because measured local queries remain near one millisecond.
-
-## Repository layout
-
-```text
-config/                         Checked-in defaults
-docs/                           Model, performance, and screenshots
-src/manufacturing_analytics/
-  analytics/                    Filters, metrics, workflows, timing
-  data/                         Schema, database adapter, analytics queries
-  domain/                       Synthetic behavior, SPC rules, quality, operations math
-  scripts/                      Generation and benchmark commands
-  services/                     Application use cases
-  web/                          Routes, templates, and static assets
-tests/                          Behavioral unit and HTTP tests
-```
-
-See [ROADMAP.md](ROADMAP.md) for scale testing, background refresh, caching, and deployment phases.
-
-## License
-
-MIT. The code and synthetic dataset are provided for education and portfolio review.
+Licensed under the [MIT License](LICENSE).

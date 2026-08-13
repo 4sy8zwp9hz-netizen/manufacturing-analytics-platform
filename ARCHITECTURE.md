@@ -1,73 +1,86 @@
 # Architecture
 
-## Context
+## Architectural objective
 
-This clean-room portfolio project contains only fictional names, relationships, rules, and generated data. Phase 3 extends the connected investigation workflow into statistical monitoring, operational flow, and data-quality evidence without turning routes or templates into analytics engines.
+The system separates source-system work from interactive work. Heterogeneous operational records are reconciled and transformed once per refresh; dashboard requests query one validated, read-optimized generation.
 
 ```mermaid
-flowchart LR
-    Browser["Browser / Chart.js / SVG"] --> Web["HTTP + presentation"]
-    Web --> Analytics["Analytics services"]
-    Web --> Bootstrap["Application services"]
-    Analytics --> Domain["Metrics + SPC + quality logic"]
-    Analytics --> Repositories["Analytics repository"]
-    Bootstrap --> Generator["Synthetic domain generator"]
-    Bootstrap --> Database["SQLite adapter"]
-    Repositories --> Database
-    Config["TOML + environment"] --> Bootstrap
-    Config --> Generator
+flowchart TB
+    subgraph Sources["Synthetic source ownership"]
+      A["MES SQLite"]
+      B["Wafer inspection SQLite"]
+      C["Chip-test SQLite"]
+      D["Sorting SQLite"]
+      E["Qualification SQLite"]
+      F["Genealogy SQLite"]
+    end
+    Sources --> X["SourceAdapter boundaries"]
+    X --> I["IdentityResolver"]
+    I --> T["RefreshPipeline transformations"]
+    T --> V["Validation"]
+    V --> G["generation-id.building.sqlite"]
+    G -->|"atomic publish"| P["generation-id.sqlite + CURRENT"]
+    P --> R["PlatformRepository read-only connection"]
+    R --> S["YieldPlatformService"]
+    S --> W["FastAPI / Jinja dashboard"]
 ```
 
-## Dependency direction
+## Layers and responsibilities
 
-### Domain
+### Source adapters
 
-`domain/` owns deterministic manufacturing behavior and reusable calculations. Coordinate generation, weighted-yield validation, Pareto math, I/MR limits, rule evaluation, operational durations, event validation, and freshness do not import FastAPI, Jinja, or SQLite.
+Each adapter owns one fictional schema and extraction contract. Adapters return source-shaped rows and watermarks; they do not know canonical joins or yield rules. The separate SQLite files make it impossible to accidentally query the sources as one warehouse.
 
-### Data
+### Identity reconciliation
 
-`data/` owns schema creation, transaction boundaries, loading, and SQL. `AnalyticsRepository` and `ProcessRepository` build filter-aware queries from allowlisted clauses and bind all user values as SQL parameters. They return records rather than presentation objects.
+`IdentityResolver` builds a multi-map from genealogy aliases. Resolution may be exact, composite, fallback, unresolved, or ambiguous. Only a unique match becomes a canonical wafer. Other results become explicit transformation issues instead of null-tolerant joins.
 
-Explicit SQL remains intentional: hiring reviewers can inspect joins, aggregation level, indexes, constraints, and cohort behavior directly. An ORM would add mapping machinery without removing the need to reason carefully about analytical grain.
+Canonical hierarchy:
 
-### Analytics
+```text
+Work Order → Lot → Wafer / Substrate → Die / Device
+```
 
-`analytics/` defines investigation inputs and workflows. `AnalyticsFilters` is the canonical cohort definition. `AnalyticsService` owns yield investigations; `ProcessAnalyticsService` composes SPC, operational-flow, and data-quality use cases. Both record lightweight query timings. This is the boundary where multiple repository calls and domain calculations become one engineering workflow.
+### Transformation
 
-### Application services
+`RefreshPipeline` owns cross-source coordination. It normalizes process families and dates, determines completion, applies production exclusions, retains latest revisions, evaluates stage-specific pass criteria, maps failure families, and assigns analytical periods. Rules that change independently of code live in TOML; structural invariants stay in Python and tests.
 
-`services/` coordinates startup workflows. Bootstrap initializes an empty schema and rebuilds the deterministic dataset when coordinate data is absent. Generated data is disposable; user data is never managed by this workflow.
+### Canonical analytical model
 
-### Web and presentation
+The central `stage_population` table uses a common traceability envelope while retaining `population_unit` (`WAFER`, `DIE`, or `SAMPLE`). A row separately records denominator membership, pass/fail, failure family, and exclusion reason. This prevents exclusion from being encoded as deletion and prevents grains from being silently combined.
 
-`web/` handles request parsing, response codes, context serialization, and rendering. Routes do not contain SQL or statistical calculations. Jinja templates render locally bundled Chart.js comparisons and retain tables or textual evidence for important outputs. The wafer map remains server-rendered SVG because the geometry is small, coordinate-native, and inspectable.
+`analytical_lineage` has at least one row per analytical population row. It records source system, source table, source key, reconciliation method, and transformation explanation.
 
-### Composition root
+### Generation store
 
-`main.py` wires settings, persistence, repositories, services, lifecycle behavior, routes, and static assets. Tests can replace only the database path while exercising the same dependency graph used by the application.
+Refresh writes a unique `.building.sqlite` file. Integrity, metadata state, and minimum population checks run before publication. The file is renamed to its immutable final name, then `CURRENT.next` atomically replaces `CURRENT`. Readers resolve the pointer for each read-only connection. A failed build never changes the pointer.
 
-## Metric definitions
+### Serving and UI
 
-- **Weighted yield:** sum of passing die divided by sum of tested die for the filtered wafer cohort.
-- **Wafer count:** distinct wafers having a final synthetic yield result in the cohort.
-- **Lot/work-order count:** distinct parent entities represented by those wafers.
-- **Tool comparison:** final wafer yield grouped by exposure to each tool at the selected operation. The default is the fictional etch operation (`OP-400`).
-- **Defect contribution:** classified inspection defects in a category divided by all classified defects in the cohort.
-- **Individuals limits:** center line ± three estimated sigma, with sigma = MR̄/1.128 for moving ranges of two.
-- **Specification limits:** fictional engineering requirements stored with the characteristic; they are not estimated from behavior.
-- **Cycle time:** operation end minus start. **Queue time:** next start minus previous end for one wafer.
-- **Freshness:** source observation time minus the latest incorporated source watermark.
+`PlatformRepository` permits only parameterized reads from the current generation. `YieldPlatformService` composes stage metrics, trend, Pareto, and wafer summaries. Routes render prepared results and CSV exports; they never invoke extraction or ETL.
 
-The time filter applies to the final yield-result timestamp. Tool and operation filters mean the wafer had that process exposure; they do not imply that the exposure caused the final outcome.
+The Phase 1–3 normalized database remains behind separate repositories for supporting wafer-map, SPC, operations, and data-quality examples. It is not the flagship dashboard's source of truth.
 
-## Performance and evolution
+## Workload boundary
 
-Every important analytics repository call is timed with `perf_counter` and logged as `analytics_query`. The service retains a bounded in-process diagnostic history for tests and local benchmarking. This is instrumentation, not caching.
+| Workload | Trigger | Reads | Writes |
+| --- | --- | --- | --- |
+| Source generation/extraction | setup or scheduled refresh | isolated sources | source files/building generation |
+| Reconciliation/transformation | scheduled refresh | extracted source rows/config | building generation |
+| Validation/publication | refresh completion | building generation | immutable generation + pointer |
+| Interactive investigation | HTTP request | current generation only | none |
 
-SPC rule results retain the rule, terminal measurement, and full evidence-index window. The UI never collapses these into a synthetic health score. Rational subgroup validation rejects arbitrary adjacent-row Xbar-S grouping; Phase 3 exposes only time-ordered Individuals charts.
+## Failure model
 
-See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the dataset baseline and optimization candidates. Likely future seams include precomputed time/product/lot aggregates, an external cache, a background refresh worker, and a PostgreSQL adapter. They should be introduced against measured workloads and explicit freshness requirements.
+- Unresolved/ambiguous identities are quarantined and counted.
+- Duplicate/revised rows receive explicit dispositions.
+- Incomplete wafers remain visible and are excluded downstream.
+- A pipeline exception removes the building artifact and preserves `CURRENT`.
+- Readers use a known-good immutable file, avoiding partial-refresh visibility.
+- Source row counts, warning counts, timestamps, and publication status are visible in the UI.
 
-## Deployment direction
+## Tradeoffs
 
-A production deployment would run behind a reverse proxy, use PostgreSQL and versioned migrations, generate immutable assets during build, run refresh work in a dedicated worker, and inject secrets from the deployment environment. Health/readiness checks, structured JSON logs, metrics, traces, backup policy, resource limits, Content Security Policy, and a locally bundled chart asset should be addressed before an internet-facing deployment.
+SQLite provides reproducibility, transactions, read-only connections, and file-level atomic publication. It does not provide distributed writers, cloud object-store semantics, or columnar execution. The next storage decision should follow measured volume and concurrency—not a desire to add fashionable infrastructure.
+
+The scheduler is intentionally an in-process seam, not a daemon. It proves due-time behavior and pipeline separation. Production deployment would place orchestration, retries, locking, alerting, and retention in an external worker/scheduler.

@@ -1,34 +1,50 @@
 {% extends "base.html" %}
+{% block title %}Yield Dashboard · Manufacturing Analytics Platform{% endblock %}
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">SEMICONDUCTOR MANUFACTURING ANALYTICS</p>
-  <h1>From factory context to explainable yield decisions.</h1>
-  <p class="lede">A production-minded analytics foundation connecting work orders, lots, wafers, process history, inspections, defects, and yield—using only deterministic synthetic data.</p>
+<section class="page-heading">
+  <div><p class="eyebrow">MULTI-SOURCE YIELD DATA PLATFORM</p><h1>Trace yield from metric to source.</h1>
+  <p class="lede">Prepared analytical populations reconcile fictional MES, wafer inspection, chip test, sorting, qualification, and genealogy systems. Interactive filters never query those sources.</p></div>
+  <a class="generation-badge" href="/platform/generation"><strong>{{ model.metadata.generation_id }}</strong><span>Published generation · inspect →</span></a>
 </section>
 
-<section class="metrics" aria-label="Dataset summary">
-  <article><span>Work orders</span><strong>{{ summary.work_orders }}</strong></article>
-  <article><span>Lots</span><strong>{{ summary.lots }}</strong></article>
-  <article><span>Wafers</span><strong>{{ summary.wafers }}</strong></article>
-  <article><span>Tools</span><strong>{{ summary.tools }}</strong></article>
-  <article class="accent"><span>Average yield</span><strong>{{ "%.2f"|format(summary.average_yield * 100) }}%</strong></article>
+<form class="filter-panel" method="get" action="/analytics/yield-dashboard">
+  <div class="filter-heading"><h2>Analytical population</h2><a href="/">Reset</a></div>
+  <div class="filter-grid">
+    <label>Period<select name="period"><option value="">All</option>{% for value in model.options.periods %}<option {% if filters.period == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Product<select name="product"><option value="">All</option>{% for value in model.options.products %}<option {% if filters.product == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Work order<select name="work_order"><option value="">All</option>{% for value in model.options.work_orders %}<option {% if filters.work_order == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Wafer<select name="wafer"><option value="">All</option>{% for value in model.options.wafers %}<option {% if filters.wafer == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Trend grain<select name="time_grain">{% for value in ['date','week','month'] %}<option value="{{ value }}" {% if model.time_grain == value %}selected{% endif %}>{{ value|title }}</option>{% endfor %}</select></label>
+    <button type="submit">Apply filters</button>
+  </div>
+</form>
+
+<section class="metrics">
+  <article class="accent"><span>Rolled production yield</span><strong>{{ "%.2f"|format(model.rolled_yield * 100) }}%</strong><small>Product of stage yields; populations are never pooled across grains.</small></article>
+  {% for stage in model.stages %}
+  <article><span>{{ stage.stage_code|replace('_', ' ') }}</span><strong>{% if stage.yield_rate is not none %}{{ "%.2f"|format(stage.yield_rate * 100) }}%{% else %}—{% endif %}</strong><small>{{ stage.good }}/{{ stage.denominator }} {{ stage.population_unit|lower }} records · {{ stage.excluded }} excluded</small></article>
+  {% endfor %}
 </section>
 
-<section class="panel">
-  <div class="panel-heading">
-    <div><p class="eyebrow">RECENT PRODUCTION</p><h2>Lot summary</h2></div>
-    <span class="status">Synthetic dataset ready</span>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Lot</th><th>Product</th><th>Status</th><th>Wafers</th><th>Average yield</th></tr></thead>
-      <tbody>
-      {% for lot in lots %}
-        <tr><td class="mono">{{ lot.lot_id }}</td><td>{{ lot.product_code }}</td><td><span class="pill">{{ lot.status }}</span></td><td>{{ lot.wafer_count }}</td><td>{{ lot.average_yield_percent }}%</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<section class="dashboard-grid">
+  <article class="panel"><div class="panel-heading"><div><p class="eyebrow">PREPARED TREND</p><h2>Chip-test yield by {{ model.time_grain }}</h2></div></div><div class="chart-frame"><canvas id="trendChart"></canvas></div></article>
+  <article class="panel"><div class="panel-heading"><div><p class="eyebrow">FAILURE OWNERSHIP</p><h2>Failure-family Pareto</h2></div></div><div class="chart-frame"><canvas id="failureChart"></canvas></div></article>
 </section>
+
+<section class="panel tool-panel">
+  <div class="panel-heading"><div><p class="eyebrow">STAGE POPULATIONS</p><h2>Inspect every denominator</h2></div><span class="status">{{ model.metadata.warning_count }} transformation warnings</span></div>
+  <div class="table-wrap"><table><thead><tr><th>Stage</th><th>Grain</th><th>Good</th><th>Denominator</th><th>Excluded</th><th>Yield</th><th>Traceability</th></tr></thead><tbody>
+  {% for stage in model.stages %}<tr><td>{{ stage.stage_code|replace('_',' ') }}</td><td>{{ stage.population_unit }}</td><td>{{ stage.good }}</td><td>{{ stage.denominator }}</td><td>{{ stage.excluded }}</td><td>{{ "%.2f"|format(stage.yield_rate * 100) if stage.yield_rate is not none else '—' }}%</td><td><a class="table-link" href="/platform/population?stage={{ stage.stage_code }}">Inspect rows →</a></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="panel tool-panel"><div class="panel-heading"><div><p class="eyebrow">OUTLIER INVESTIGATION</p><h2>Lowest-yield wafers first</h2></div></div><div class="table-wrap"><table><thead><tr><th>Wafer</th><th>Lot</th><th>Work order</th><th>Product</th><th>Completion</th><th>Chip yield</th></tr></thead><tbody>
+{% for wafer in model.wafers %}<tr><td><a class="table-link mono" href="/platform/wafers/{{ wafer.canonical_wafer_id }}">{{ wafer.canonical_wafer_id }}</a></td><td class="mono">{{ wafer.canonical_lot_id }}</td><td class="mono">{{ wafer.canonical_work_order_id }}</td><td>{{ wafer.product_code }}</td><td><span class="pill">{{ wafer.completion_status }}</span></td><td>{% if wafer.chip_total %}{{ "%.2f"|format(wafer.chip_good / wafer.chip_total * 100) }}%{% else %}Excluded{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>
+
+<details class="metric-notes"><summary>How the headline is constructed</summary><p>Each stage owns its denominator: wafers for processing and wafer inspection, dies for chip test and sorting. Rolled production yield multiplies the four conditional stage rates. Qualification is contextual and deliberately excluded. Click any stage or wafer to see the exact records and lineage.</p></details>
 {% endblock %}
-
+{% block scripts %}<script src="/static/vendor/chart.umd.min.js"></script><script>
+const trend={{ model.trend|tojson }}; new Chart(document.getElementById('trendChart'),{type:'line',data:{labels:trend.map(x=>x.period),datasets:[{label:'Chip-test yield %',data:trend.map(x=>x.yield_rate*100),borderColor:'#006d68',backgroundColor:'#b8e15b',tension:.25}]},options:{responsive:true,maintainAspectRatio:false}});
+const failures={{ model.failures|tojson }}; new Chart(document.getElementById('failureChart'),{type:'bar',data:{labels:failures.map(x=>x.failure_family),datasets:[{label:'Failed population records',data:failures.map(x=>x.failure_count),backgroundColor:'#e15e4b'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false}});
+</script>{% endblock %}

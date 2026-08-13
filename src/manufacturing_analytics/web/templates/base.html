@@ -14,12 +14,12 @@
     </header>
     <div class="layout">
       <nav class="sidebar" aria-label="Analytics navigation">
-        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Overview</a>
-        <a href="/analytics/yield-overview" class="{% if request.url.path == '/analytics/yield-overview' or request.url.path.startswith('/lots/') %}active{% endif %}">Yield Overview</a>
+        <a href="/" class="{% if request.url.path == '/' or request.url.path == '/analytics/yield-dashboard' or request.url.path.startswith('/platform/') %}active{% endif %}">Yield Dashboard</a>
+        <a href="/analytics/yield-overview" class="{% if request.url.path == '/analytics/yield-overview' or request.url.path.startswith('/lots/') %}active{% endif %}">Legacy Yield Lab</a>
         <a href="/analytics/wafer-analysis" class="{% if request.url.path == '/analytics/wafer-analysis' or request.url.path.startswith('/wafers/') %}active{% endif %}">Wafer Analysis</a>
         <a href="/analytics/pareto-analysis" class="{% if request.url.path == '/analytics/pareto-analysis' %}active{% endif %}">Pareto Analysis</a>
-        <a href="/analytics/process-spc" class="{% if request.url.path == '/analytics/process-spc' %}active{% endif %}">Process / SPC</a>
-        <a href="/analytics/manufacturing-operations" class="{% if request.url.path == '/analytics/manufacturing-operations' %}active{% endif %}">Manufacturing Operations</a>
+        <a href="/analytics/process-spc" class="{% if request.url.path == '/analytics/process-spc' %}active{% endif %}">Supporting: SPC</a>
+        <a href="/analytics/manufacturing-operations" class="{% if request.url.path == '/analytics/manufacturing-operations' %}active{% endif %}">Supporting: Operations</a>
         <a href="/analytics/data-quality" class="{% if request.url.path == '/analytics/data-quality' %}active{% endif %}">Data Quality</a>
         <p class="synthetic-note">All displayed manufacturing data is generated and fictional.</p>
       </nav>
