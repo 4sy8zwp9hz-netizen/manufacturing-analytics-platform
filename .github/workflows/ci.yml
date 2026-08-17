@@ -30,4 +30,4 @@ jobs:
       - name: Test
         run: pytest --cov=manufacturing_analytics --cov-report=term-missing
       - name: Exercise data generation
-        run: python -m manufacturing_analytics.scripts.generate_data
+        run: python -m manufacturing_analytics.scripts.refresh_data
