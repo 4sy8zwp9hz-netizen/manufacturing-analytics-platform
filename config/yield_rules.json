@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "allow_normalized_alias_match": true,
+    "exclude_ambiguous_aliases": true,
+    "exclude_unresolved_from_final_yield": true
+  },
+  "final_chip_yield": {
+    "required_components": ["CHIP_INSPECTION", "DEVICE_FORMATION", "SORTING", "QUALIFICATION"],
+    "require_complete_physical_wafer_cohort": true,
+    "aggregation": "quantity_weighted"
+  },
+  "display_rows": [
+    {"section": "Wafer Process", "stage_code": "WAFER_INSPECTION", "label": "Incoming Wafer Inspection", "order": 10},
+    {"section": "Wafer Process", "stage_code": "SURFACE_PREPARATION", "label": "Surface Preparation", "order": 20},
+    {"section": "Wafer Process", "stage_code": "PATTERN_SEPARATION", "label": "Pattern Separation", "order": 30},
+    {"section": "Wafer Process", "stage_code": "PROTECTIVE_FINISH", "label": "Protective Finish", "order": 40},
+    {"section": "Wafer Process", "stage_code": "AUTO_OUTLIER", "label": "Automated Outlier", "order": 50},
+    {"section": "Wafer Process", "stage_code": "WAFER_TOTAL", "label": "Wafer Total", "order": 60},
+    {"section": "Chip Process", "stage_code": "CHIP_INSPECTION", "label": "Chip Inspection", "order": 70},
+    {"section": "Chip Process", "stage_code": "DEVICE_FORMATION", "label": "Device Formation", "order": 80},
+    {"section": "Performance / Sorting", "stage_code": "SORTING", "label": "Sorting Yield: Channel A", "order": 90},
+    {"section": "Qualification", "stage_code": "QUALIFICATION", "label": "Qualification", "order": 100},
+    {"section": "Chip Total", "stage_code": "FINAL_CHIP_YIELD", "label": "Chip Yield: Channel A", "order": 110}
+  ]
+}

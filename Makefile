@@ -4,14 +4,14 @@ install:
 	python -m pip install -e ".[dev]"
 
 data:
-	python -m manufacturing_analytics.scripts.generate_data
+	python -m manufacturing_analytics.scripts.refresh_data
 
 run:
-	uvicorn manufacturing_analytics.main:app --reload
+	python -m manufacturing_analytics.main
 
 test:
-	pytest
+	python -m pytest
 
 lint:
-	ruff check .
-	ruff format --check .
+	python -m ruff check .
+	python -m ruff format --check .

@@ -1,49 +1,38 @@
 # Roadmap
 
-The project now progresses as a manufacturing yield data platform. SPC and operations remain supporting capabilities, not the central product identity.
+The major clean-room alignment is complete. This roadmap contains only refinements that follow from
+the verified architecture; it is not a plan to add fashionable infrastructure.
 
-## 1. Foundation — complete
+## Completed alignment
 
-- Maintainable Python package, configuration, logging, tests, CI, and documentation
-- Deterministic synthetic work orders, lots, wafers, dies, operations, and inspections
-- Wafer maps, yield trends, Pareto, and parameterized data access
+- Dash/Plotly table-first Yield workflow
+- Synthetic substitute for source-shaped manufacturing records
+- Pandas identity, revision, date, population, and cohort transformation
+- Wafer and chip grains with quantity-weighted final Yield
+- Parquet generations, manifests, compatibility validation, and atomic publication
+- Common in-memory snapshot plus last-known-good behavior
+- Separate Sorting preload and targeted physical-wafer detail
+- Scheduled refresh loops and generation hot reload
+- Waitress server and portal-ready application factory
+- Traceability, export, failure injection, tests, lint, and current screenshots
+- Architecture, data flow, evolution, performance, deployment, calculation, and terminology docs
 
-## 2. Multi-source manufacturing data — complete
+## Next fidelity refinements
 
-- Six isolated fictional source systems with heterogeneous schemas and grains
-- Deliberate duplicates, revisions, late data, missing IDs, naming differences, and exclusions
-- Explicit canonical identity and genealogy reconciliation
+1. Add more synthetic equivalents of supported process families only after mapping each to a real
+   workflow and confirming that the terminology is safe.
+2. Expand selected-period navigation and exclusion controls to more closely mirror the mature
+   Enhance workflow.
+3. Add a clean-room Excel export with summary, period, raw-population, and lineage sheets.
+4. Add an optional fake-connector integration test that proves parameter binding and scoped-key SQL
+   construction without requiring SQL Server.
+5. Add screenshot regression checks for layout dimensions and required workflow elements.
+6. Add public synthetic benchmarks with machine/runtime metadata and clearly separate them from any
+   private production outcome.
 
-## 3. ETL and analytical model — complete
+## Explicitly out of scope
 
-- Source-specific extraction boundaries
-- Configuration-driven manufacturing transformations
-- Stage-specific denominators, failure families, exclusions, and completion logic
-- Canonical wafer and population records with row-level source lineage
-- Validation findings and quarantines
-
-## 4. Yield investigation application — complete
-
-- Flagship multi-stage Yield Dashboard
-- Month/product/work-order/wafer filters
-- Trend, Pareto, stage population inspection, CSV export, and wafer lineage drill-down
-- Supporting wafer map, SPC, operations, and data-quality labs retained
-
-## 5. Refresh and performance architecture — portfolio implementation complete
-
-- Immutable generations and atomic current-generation pointer
-- Failed-refresh fallback to previous known-good data
-- Testable scheduled-refresh seam
-- Source watermarks, row counts, warnings, and publication metadata
-- Configurable staged benchmark with measured results
-
-Future scale work: incremental extraction, idempotency keys, refresh locks, generation retention, partitioned Parquet/DuckDB evaluation, and precomputed filter cubes only where benchmarks justify them.
-
-## 6. Deployment and platform operations — next
-
-- Container image and environment-specific configuration
-- Dedicated refresh worker/scheduler
-- Structured metrics, traces, alerting, and refresh run history
-- Retry/dead-letter policies and operational runbooks
-- Authentication/authorization for source lineage and exports
-- Concurrency, load, recovery, and schema-migration testing
+PostgreSQL, Redis, DuckDB, Docker, Kubernetes, cloud infrastructure, microservices, and AI features
+are not planned merely to make the repository appear more advanced. A future technology belongs
+here only if it reflects completed experience, is required for the public demonstration, or is
+clearly labeled as exploration.

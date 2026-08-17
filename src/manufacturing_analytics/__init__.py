@@ -1,3 +1,3 @@
-"""Manufacturing Analytics Platform."""
+"""Clean-room manufacturing Yield Dashboard portfolio."""
 
-__version__ = "0.4.0"
+__version__ = "1.0.0"

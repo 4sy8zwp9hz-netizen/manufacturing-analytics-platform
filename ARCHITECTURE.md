@@ -1,86 +1,182 @@
 # Architecture
 
-## Architectural objective
+This document answers: **“Walk me through the system and explain why the layers exist.”**
 
-The system separates source-system work from interactive work. Heterogeneous operational records are reconciled and transformed once per refresh; dashboard requests query one validated, read-optimized generation.
+The architecture is a clean-room analogue of a production Yield Dashboard. It preserves the
+implemented patterns and tradeoffs while using independently written code and fictional data.
+
+## Current public architecture
 
 ```mermaid
-flowchart TB
-    subgraph Sources["Synthetic source ownership"]
-      A["MES SQLite"]
-      B["Wafer inspection SQLite"]
-      C["Chip-test SQLite"]
-      D["Sorting SQLite"]
-      E["Qualification SQLite"]
-      F["Genealogy SQLite"]
+flowchart TD
+    subgraph Source boundary
+        PROD["Production-inspired: SQL Server + pyodbc"]
+        DEMO["Runnable public substitute: synthetic source adapter"]
     end
-    Sources --> X["SourceAdapter boundaries"]
-    X --> I["IdentityResolver"]
-    I --> T["RefreshPipeline transformations"]
-    T --> V["Validation"]
-    V --> G["generation-id.building.sqlite"]
-    G -->|"atomic publish"| P["generation-id.sqlite + CURRENT"]
-    P --> R["PlatformRepository read-only connection"]
-    R --> S["YieldPlatformService"]
-    S --> W["FastAPI / Jinja dashboard"]
+
+    PROD -. "same DataFrame contract" .-> EXTRACT["Source-shaped Pandas frames"]
+    DEMO --> EXTRACT
+    EXTRACT --> ID["Physical-wafer identity resolution"]
+    ID --> RULES["Manufacturing population and yield rules"]
+    RULES --> VALIDATE["Validation and lineage"]
+    VALIDATE --> PARQUET["Immutable Parquet generation"]
+    PARQUET --> POINTER["Atomic CURRENT.json publication"]
+
+    POINTER --> COMMON["Lock-protected common snapshot"]
+    POINTER --> PRELOAD["Separate Sorting preload"]
+    POINTER --> DETAIL["Population-scoped detail reader"]
+
+    COMMON --> ANALYTICS["In-memory Yield views"]
+    PRELOAD --> ANALYTICS
+    DETAIL --> ANALYTICS
+    ANALYTICS --> DASH["Dash callbacks + Plotly figures"]
+    DASH --> WAITRESS["Waitress WSGI server"]
 ```
 
-## Layers and responsibilities
+## Layer responsibilities
 
-### Source adapters
+### Source boundary
 
-Each adapter owns one fictional schema and extraction contract. Adapters return source-shaped rows and watermarks; they do not know canonical joins or yield rules. The separate SQLite files make it impossible to accidentally query the sources as one warehouse.
+[`sources.py`](src/manufacturing_analytics/sources.py) returns source-shaped DataFrames rather than
+already-correct metrics. The public synthetic adapter deliberately includes different identifiers,
+wafer and chip grains, revisions, different event dates, ambiguous aliases, and high-volume
+parameter detail.
 
-### Identity reconciliation
+`SqlServerManufacturingSource` shows the completed production-inspired access boundary:
+parameterized SQL through a lazily imported `pyodbc`. Its public query names are fictional and it
+contains no connection details. It is not presented as a runnable production connector.
 
-`IdentityResolver` builds a multi-map from genealogy aliases. Resolution may be exact, composite, fallback, unresolved, or ambiguous. Only a unique match becomes a canonical wafer. Other results become explicit transformation issues instead of null-tolerant joins.
+### Pandas transformation
 
-Canonical hierarchy:
+[`transforms.py`](src/manufacturing_analytics/transforms.py) owns the interpretation work:
 
-```text
-Work Order → Lot → Wafer / Substrate → Die / Device
+- exact and normalized alias matching;
+- explicit ambiguous and unresolved dispositions;
+- latest-revision selection;
+- source-specific event-date selection;
+- wafer-grain and chip-grain denominators;
+- complete physical-wafer cohorts;
+- component and quantity-weighted yield;
+- failure attribution and record lineage.
+
+This layer exists because changing an engineering calculation should not require rewriting the
+Dash callbacks or the Parquet publication mechanism.
+
+### Prepared analytical storage
+
+[`storage.py`](src/manufacturing_analytics/storage.py) writes one generation directory containing:
+
+- common Yield and failure facts;
+- wafer summaries and final component facts;
+- prebuilt trend and Pareto datasets;
+- identity audit and lineage;
+- targeted chip and Sorting detail;
+- a manifest with schema version, columns, row counts, load policy, statistics, and status.
+
+Files are written beneath a temporary generation directory. Validation must succeed before the
+directory is promoted and `CURRENT.json` is atomically replaced. Retained valid generations provide
+a fallback if the pointer or newest generation is damaged.
+
+### Runtime state and refresh
+
+[`runtime.py`](src/manufacturing_analytics/runtime.py) separates persisted data from active server
+state:
+
+- `SnapshotManager` swaps a complete common generation under a lock.
+- `RefreshCoordinator` extracts, transforms, validates, publishes, and then swaps.
+- `SortingPreload` builds its expensive common analysis on a separate cycle.
+- `GenerationWatcher` hot-loads externally published generations without a server restart.
+- `TargetedDetailRepository` reads only selected physical-wafer detail.
+
+The active snapshot is never cleared while a replacement is being built.
+
+```mermaid
+flowchart LR
+    GOOD["Current known-good snapshot"] --> SERVE["Continue serving users"]
+    GOOD --> REFRESH["Background refresh"]
+    REFRESH --> ETL["Extract → transform → validate"]
+    ETL --> DECISION{"Valid?"}
+    DECISION -->|Yes| PUBLISH["Publish generation and swap snapshot"]
+    DECISION -->|No| RETAIN["Retain active snapshot and report warning"]
+    PUBLISH --> SERVE
+    RETAIN --> SERVE
 ```
 
-### Transformation
+### Analytical views
 
-`RefreshPipeline` owns cross-source coordination. It normalizes process families and dates, determines completion, applies production exclusions, retains latest revisions, evaluates stage-specific pass criteria, maps failure families, and assigns analytical periods. Rules that change independently of code live in TOML; structural invariants stay in Python and tests.
+[`yield_analytics.py`](src/manufacturing_analytics/yield_analytics.py) performs fast filtering and
+aggregation over the active common snapshot. It builds the Yield matrix, selected-period Pareto,
+full-range trend, physical-wafer scatter, traceability table, and export population.
 
-### Canonical analytical model
+The module requests detailed records only after a selected period has narrowed the physical-wafer
+population.
 
-The central `stage_population` table uses a common traceability envelope while retaining `population_unit` (`WAFER`, `DIE`, or `SAMPLE`). A row separately records denominator membership, pass/fail, failure family, and exclusion reason. This prevents exclusion from being encoded as deletion and prevents grains from being silently combined.
+### Dash application
 
-`analytical_lineage` has at least one row per analytical population row. It records source system, source table, source key, reconciliation method, and transformation explanation.
+[`application.py`](src/manufacturing_analytics/application.py) owns layout and interaction:
 
-### Generation store
+1. filter the broad Yield matrix;
+2. select one period cell;
+3. open Enhance without discarding the selected context;
+4. inspect Pareto, trend, and physical-wafer variation;
+5. select a wafer to retrieve its detail;
+6. export the exact population.
 
-Refresh writes a unique `.building.sqlite` file. Integrity, metadata state, and minimum population checks run before publication. The file is renamed to its immutable final name, then `CURRENT.next` atomically replaces `CURRENT`. Readers resolve the pointer for each read-only connection. A failed build never changes the pointer.
+The application factory accepts a URL base path so the Dash WSGI application can be mounted beneath
+a larger Flask application portal. [`main.py`](src/manufacturing_analytics/main.py) serves the
+standalone public application with Waitress.
 
-### Serving and UI
+## Workload separation
 
-`PlatformRepository` permits only parameterized reads from the current generation. `YieldPlatformService` composes stage metrics, trend, Pareto, and wafer summaries. Routes render prepared results and CSV exports; they never invoke extraction or ETL.
+| Data path | Trigger | Held in memory | Persisted | Failure behavior |
+| --- | --- | --- | --- | --- |
+| Common Yield snapshot | startup, scheduled refresh, manual refresh, generation watch | Yes | Parquet generation | previous snapshot remains active |
+| Prebuilt trend/Pareto | common refresh | Yes | Parquet generation | previous common snapshot remains active |
+| Sorting parameter summary | separate background preload/cadence | Summary only | raw detail in Parquet | previous preload retained |
+| Chip/Sorting detail | selected physical wafer | No broad preload | targeted Parquet fact | current common view remains usable |
 
-The Phase 1–3 normalized database remains behind separate repositories for supporting wafer-map, SPC, operations, and data-quality examples. It is not the flagship dashboard's source of truth.
+## Configuration
 
-## Workload boundary
+[`default.json`](config/default.json) controls runtime, generation retention, refresh cadence,
+synthetic volume, and display defaults. [`yield_rules.json`](config/yield_rules.json) controls the
+fictional row hierarchy, identity policy, and final-yield cohort requirements.
 
-| Workload | Trigger | Reads | Writes |
-| --- | --- | --- | --- |
-| Source generation/extraction | setup or scheduled refresh | isolated sources | source files/building generation |
-| Reconciliation/transformation | scheduled refresh | extracted source rows/config | building generation |
-| Validation/publication | refresh completion | building generation | immutable generation + pointer |
-| Interactive investigation | HTTP request | current generation only | none |
+Configuration is deliberately JSON because the reference applications use shared, editable JSON
+for changing operational and engineering behavior. The public files contain only fictional rules.
 
-## Failure model
+## Concurrency assumptions
 
-- Unresolved/ambiguous identities are quarantined and counted.
-- Duplicate/revised rows receive explicit dispositions.
-- Incomplete wafers remain visible and are excluded downstream.
-- A pipeline exception removes the building artifact and preserves `CURRENT`.
-- Readers use a known-good immutable file, avoiding partial-refresh visibility.
-- Source row counts, warning counts, timestamps, and publication status are visible in the UI.
+- One in-process refresh writer is protected by a non-blocking lock.
+- Snapshot publication is a short lock-protected assignment after all expensive work finishes.
+- Parquet publication has a separate writer lock and an atomic pointer replacement.
+- Sorting preload has its own refresh lock and does not block common publication.
+- Waitress provides multiple request threads for the server-hosted application.
 
-## Tradeoffs
+This design mirrors a single Windows-hosted internal application service. Distributed coordination
+is not claimed and would require a different design.
 
-SQLite provides reproducibility, transactions, read-only connections, and file-level atomic publication. It does not provide distributed writers, cloud object-store semantics, or columnar execution. The next storage decision should follow measured volume and concurrency—not a desire to add fashionable infrastructure.
+## Production current, historical, and future
 
-The scheduler is intentionally an in-process seam, not a daemon. It proves due-time behavior and pipeline separation. Production deployment would place orchestration, retries, locking, alerting, and retention in an external worker/scheduler.
+### Direct analogues of current completed behavior
+
+SQL Server/`pyodbc`, parameterized source pulls, Pandas transformations, Dash/Plotly, shared JSON,
+in-memory snapshots, preloads, separate expensive-data cycles, targeted retrieval, Parquet
+generations, background refresh, last-known-good behavior, Waitress, and portal mounting.
+
+### Historical modes represented in documentation
+
+Engineering/development scripts, local Dash servers, packaged desktop/pywebview behavior, versioned
+application distribution, and centrally installed applications preceded the server-hosted model.
+They are part of the evolution story, not additional runtime modes in this public app.
+
+### Future or deliberately excluded
+
+A real SQL Server deployment of this public code, multi-process/distributed cache coordination,
+cloud hosting, containers, Redis, PostgreSQL, DuckDB, microservices, and AI features are not current
+features. They are not needed to explain the work represented here.
+
+## Clean-room boundary
+
+The design mirrors categories of behavior—not private implementation. No private SQL, schema,
+hostname, address, path, product, process identifier, failure code, business-rule threshold,
+credential, screenshot, or production value appears in this repository.

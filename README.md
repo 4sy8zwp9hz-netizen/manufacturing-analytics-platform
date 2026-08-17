@@ -1,143 +1,186 @@
 # Manufacturing Analytics Platform
 
-A synthetic semiconductor manufacturing data platform that integrates multiple heterogeneous production systems into a continuously refreshed analytical model used by an interactive yield-investigation application.
+This clean-room project recreates the architecture and engineering lessons of a semiconductor
+manufacturing Yield Dashboard I developed in a production environment. The original system grew
+from SQL/Python engineering analysis into a centrally hosted, automatically refreshed
+manufacturing application as adoption, dataset size, query latency, and deployment requirements
+increased.
 
-Every system, identifier, distribution, process name, rule, screenshot, and record in this repository is fictional. The implementation is clean-room and contains no employer code, schemas, SQL, credentials, business rules, or production data.
-
-## The problem
-
-A useful yield application cannot repeatedly reconstruct manufacturing truth from operational systems every time a user changes a filter. Those systems have different identifiers, grains, clocks, revisions, and purposes. This project treats the dashboard as the consumer of a data platform:
+This public version contains only synthetic data and independently written code. It reproduces
+the major architectural patterns, user workflow, information density, and engineering tradeoffs
+of the real system without publishing employer code, SQL, schemas, identifiers, infrastructure,
+business rules, or data.
 
 ```mermaid
 flowchart LR
-    MES["MES / process history"] --> ING["Source-specific ingestion"]
-    WI["Wafer inspection"] --> ING
-    CT["Chip test"] --> ING
-    ST["Sorting / parameters"] --> ING
-    QL["Qualification"] --> ING
-    ID["Genealogy lookup"] --> ING
-    ING --> REC["Identity reconciliation"]
-    REC --> ETL["ETL + manufacturing rules"]
-    ETL --> VAL["Validation + quarantine"]
-    VAL --> CAN["Canonical analytical model"]
-    CAN --> GEN["Immutable generation"]
-    GEN --> PUB["Atomic CURRENT pointer"]
-    PUB --> UI["Yield Dashboard"]
+    SQL["SQL Server manufacturing sources"] --> ODBC["pyodbc + parameterized SQL"]
+    ODBC --> PD["Python / Pandas transforms"]
+    PD --> LOGIC["Engineering populations and yield logic"]
+    LOGIC --> PREP["Prepared analytical data"]
+    PREP --> COMMON["Cached / prebuilt common views"]
+    PREP --> TARGET["Population-scoped detail retrieval"]
+    COMMON --> UI["Dash / Plotly"]
+    TARGET --> UI
+    UI --> SERVER["Waitress server"]
+    SERVER --> USERS["Shared browser users"]
 ```
 
-Normal dashboard interaction opens only the latest immutable analytical generation in read-only mode. Source extraction and manufacturing transformation occur during refresh, not during HTTP requests.
+The runnable public path substitutes a deterministic synthetic source adapter for the unavailable
+production database. The Pandas transformation, prepared-data, refresh, caching, drilldown, and UI
+layers remain the architectural story.
 
-![Multi-source yield dashboard](docs/screenshots/yield-data-platform.png)
+![Synthetic production Yield summary](docs/screenshots/yield-summary.png)
 
-## What the platform demonstrates
+## The manufacturing problem
 
-- Six separate SQLite source systems with deliberately different schemas and data grains
-- Substrate aliases, inspection aliases, and composite work-order/lot + wafer identities
-- Explicit resolved, unresolved, ambiguous, and fallback reconciliation outcomes
-- Duplicate records, late arrivals, revised results, missing identifiers, incomplete routes, inconsistent date formats, and non-production populations
-- Configuration-driven process-family, failure-family, completion, specification, and exclusion rules
-- Wafer- and die-grain denominators that are never silently pooled
-- Immutable analytical generations, source watermarks, validation metadata, and atomic publication
-- Known-good fallback when a refresh fails
-- Metric → population → wafer/die → synthetic source-record lineage
-- Date/week/month trends, stage yields, Pareto and outlier analysis, wafer drill-down, CSV population export, and generation inspection
-- Supporting wafer maps, SPC, operations, query instrumentation, tests, logging, and CI retained from earlier iterations
+Raw production records do not directly equal an engineering yield metric. Different sources can
+identify the same physical wafer differently, arrive at wafer or chip grain, use different event
+dates, contain revisions, and represent different populations. A summary must still explain:
 
-## Synthetic sources
+- which physical wafers were eligible;
+- which date placed each record in a reporting period;
+- which denominator was used by each row;
+- which failures caused the loss;
+- which source-derived rows contributed to the result.
 
-| Source | Grain | Native identity | Intentional teaching cases |
-| --- | --- | --- | --- |
-| MES | Process event | lot + wafer, sometimes substrate | missing substrate, incomplete route, naming variants |
-| Wafer inspection | Wafer observation | inspection alias | duplicate and revised inspection, non-ISO dates, unresolved alias |
-| Chip test | Die result | substrate + device | late arrival, die-level failures |
-| Sorting | Die parameter | work order + wafer sequence + device | specification-based pass/fail |
-| Qualification | Sample result | lot + wafer | retained context excluded from production yield |
-| Genealogy | Alias mapping | heterogeneous aliases | composite resolution and ambiguous alias example |
+The project therefore models the path from source-shaped records to a defensible analytical
+population—not merely a collection of charts.
 
-The adapters in `pipeline/sources.py` know only their own source. No cross-source mega-query exists.
+## What the application demonstrates
 
-## Manufacturing transformations
+- A table-first, information-dense Yield review modeled on a repeatedly used engineering workflow
+- Wafer-process, inspection, automated-screening, Sorting, qualification, and final-chip rows
+- Exact and normalized physical-wafer identity resolution with explicit ambiguity handling
+- Revision-aware and source-date-aware Pandas transformation
+- Qualification-cohort final yield with complete components and quantity weighting
+- Selected-cell investigation through Pareto, trend, physical-wafer scatter, lineage, and export
+- Common in-memory analytical data, separately preloaded expensive analysis, and targeted detail
+- Validated Parquet generations with manifests, compatibility checks, and atomic publication
+- Background refresh, generation hot reload, and previous-known-good behavior after failure
+- Dash/Plotly presentation and Waitress hosting with a portal-ready application factory
+- JSON-driven display, identity, cohort, runtime, and refresh behavior
 
-Fictional rules in `config/transformation_rules.toml` demonstrate domain decisions rather than generic joins:
+![Selected-cell Yield investigation](docs/screenshots/yield-enhance.png)
 
-- Normalize `ETCH-A` and `ETCH ALPHA` into one process family.
-- Require the configured final process family for production completion.
-- Retain the latest inspection revision and classify the earlier row as superseded.
-- Map source failure codes and labels into canonical failure families.
-- Apply wafer-inspection acceptance at wafer grain and parameter limits at die grain.
-- Exclude incomplete wafers from downstream production denominators.
-- Retain qualification records for context while excluding them from production yield.
-- Assign a normalized analytical month and preserve the source record behind every output row.
+## Why the architecture changed
 
-The headline rolled yield is the product of conditional stage yields. It is not a ratio formed by mixing wafer and die records.
+| Stage | New problem | Change made |
+| --- | --- | --- |
+| Engineering analysis | Source records were not usable as engineering populations | SQL plus Pandas transformation |
+| Repeated use | Manual analysis did not scale | Dash/Plotly application |
+| User adoption | Packaged applications became difficult to distribute and update | Versioned releases, shared configuration, central application access |
+| More data | Broad SQL and repeated calculations increased startup and interaction time | Query redesign, shared snapshots, and cache reuse |
+| Expensive analysis | Not every dataset belonged on the startup path | Lazy work, background prebuild, and separate preload cycles |
+| Shared use | Per-user processing duplicated the same database work | Central server hosting |
+| Repeated source work | Users and applications rebuilt the same analytical population | Scheduled ETL and prepared Parquet data |
+| Refresh failure | A failed rebuild could not interrupt a working production view | Last-known-good snapshot retention |
 
-## Analytical generations and failure recovery
+The detailed chronology is in [Engineering Evolution](docs/ENGINEERING_EVOLUTION.md).
 
-A refresh extracts every source, reconciles identities, transforms records, builds the canonical population, writes lineage and quality dispositions, validates the database, and only then publishes it. Generation databases are immutable. Publication renames the completed file and atomically replaces a small `CURRENT` pointer.
+## Three data-access strategies
 
-If extraction, reconciliation, transformation, loading, or validation fails, the building file is removed and `CURRENT` remains unchanged. Readers continue to serve the previous known-good generation.
+The code intentionally does not treat every dataset alike.
 
-The included `ScheduledRefresh` is a testable scheduling seam. A production deployment would call the same idempotent pipeline from a dedicated worker or platform scheduler, never from a user filter request.
+| Workload | Public implementation | Reason |
+| --- | --- | --- |
+| Common Yield population | Loaded during refresh, transformed with Pandas, published in Parquet, then held in memory | Used by normal filters and table interactions |
+| Expensive but common Sorting analysis | Detail remains persisted while a separate background cycle builds reusable parameter summaries | Avoids making the common snapshot wait for a specialized workload |
+| High-volume chip/parameter detail | Read only for the physical wafer selected in the investigation | Avoids preloading unrelated rows merely to make one drilldown fast |
+
+See [Data Flow](docs/DATA_FLOW.md) and [Performance Evolution](docs/PERFORMANCE_EVOLUTION.md).
 
 ## Repository structure
 
 ```text
-config/                         Transformation and generation configuration
+config/
+  default.json               runtime, storage, refresh, and display settings
+  yield_rules.json           fictional identity, cohort, and row definitions
 src/manufacturing_analytics/
-  pipeline/                     Source adapters, identity, ETL, generations
-  data/                         Read-only analytical and legacy repositories
-  analytics/                    Dashboard use-case orchestration
-  domain/                       Synthetic generation, statistics, SPC
-  services/                     Application bootstrap boundaries
-  web/                          FastAPI routes, templates, local assets
-  scripts/                      Data generation and staged benchmarks
-tests/                          Behavioral and component tests
-docs/                           Architecture, model, walkthrough, performance
+  sources.py                 synthetic substitute and optional SQL Server boundary
+  transforms.py              identity, population, yield, and lineage logic
+  storage.py                 Parquet generations and targeted detail reads
+  runtime.py                 snapshots, refresh, preload, and hot reload
+  yield_analytics.py         in-memory tables, figures, and drilldown views
+  application.py             Dash layout and callbacks
+  bootstrap.py               explicit service composition and background loops
+  main.py                    Waitress entry point
+tests/                       behavioral and failure-path contracts
+tools/capture_screenshots.py browser capture from the running application
+docs/                        interview-oriented design and evolution documents
 ```
 
-## Technology choices
-
-- **Python 3.11+** for the application and pipeline
-- **SQLite** for separate synthetic sources and immutable analytical generations
-- **FastAPI + Jinja2** for a small server-rendered investigation interface
-- **Chart.js**, bundled locally, for interactive charts
-- **pytest** and **Ruff** for behavioral tests and static quality gates
-- **GitHub Actions** for continuous integration
-
-SQLite is deliberate here: separate files make system ownership and atomic generation publication visible, require no external service, and keep the portfolio reproducible. DuckDB/Parquet would become attractive when columnar scans, partitioned generations, or substantially larger populations justify another runtime dependency.
+The package structure is deliberately small. It separates work that changes for different
+reasons without introducing a framework of unnecessary interfaces.
 
 ## Run locally
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
+Python 3.11 or newer is required.
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
-uvicorn manufacturing_analytics.main:app --reload
+python -m manufacturing_analytics.scripts.refresh_data
+python -m manufacturing_analytics.main
 ```
 
-Open `http://127.0.0.1:8000`. The first startup creates the source files and publishes a generation under `data/yield_platform/`; all artifacts are deterministic and ignored by Git.
+Open `http://127.0.0.1:8050`.
 
-```bash
-pytest
-ruff check .
-ruff format --check .
-python -m manufacturing_analytics.scripts.benchmark_pipeline
+The server loads the most recent valid generation. If no generation exists, it creates one from
+the synthetic adapter. Generated files live beneath `data/yield_runtime/` and are ignored by git.
+
+## Exercise the workflow
+
+1. Filter the summary by product, work order, wafer size, date, or period grain.
+2. Select a period cell in a Yield row.
+3. Choose **Enhance**.
+4. Inspect the selected-period Pareto and the full-range trend.
+5. Select a physical wafer in the scatter plot.
+6. Confirm that only that wafer's chip or Sorting detail is retrieved.
+7. Export the exact selected analytical population.
+8. Choose **Refresh data** and watch the existing screen remain usable during refresh.
+
+## Verification
+
+```powershell
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
 ```
 
-## Investigation workflow
+The tests cover reproducibility, source grains, identity ambiguity, revisions, cohort consistency,
+quantity weighting, lineage, Parquet validation, atomic publication, injected refresh failures,
+known-good fallback, separate Sorting preload behavior, population-scoped detail, Dash layout, and
+health reporting.
 
-1. Filter the Yield Dashboard by analytical month, product, work order, or wafer and choose date/week/month trend aggregation.
-2. Compare stage yields without mixing their population grains.
-3. Inspect the failure-family Pareto and chip-test trend.
-4. Open a stage to inspect or export its precise denominator.
-5. Open a canonical wafer to see source-system keys and transformation notes.
-6. Open the generation badge to inspect watermarks, row counts, warnings, and dispositions.
+## Production pattern versus public accommodation
 
-See [the end-to-end wafer walkthrough](docs/PIPELINE_WALKTHROUGH.md), [architecture](ARCHITECTURE.md), [data model](docs/DATA_MODEL.md), [measured performance](docs/PERFORMANCE.md), and [roadmap](ROADMAP.md).
+| Classification | What it means here |
+| --- | --- |
+| Direct analogue of completed work | SQL Server/`pyodbc` boundary, Pandas transformations, Dash/Plotly, JSON configuration, caches/preloads, background refresh, Parquet preparation, targeted retrieval, Waitress, portal mounting pattern, and failure-tolerant snapshots |
+| Public-demo accommodation | Deterministic synthetic source records replace inaccessible production SQL sources |
+| Future design | A real SQL Server deployment of this public code, multi-process cache coordination, and additional sanitized workflows are not claimed as completed public features |
 
-## Scope and limitations
+No SQLite, FastAPI, Jinja application, Redis, PostgreSQL, DuckDB, Docker, Kubernetes, cloud service,
+microservice system, or AI feature is part of the flagship architecture.
 
-This is a portfolio-scale reference implementation, not a fab execution system. It uses local files, one refresh process, modest synthetic volumes, and simplified fictional yield rules. It does not claim equipment utilization, causal failure attribution, real-time ingestion, or production-grade distributed coordination. Those omissions are documented design boundaries rather than hidden assumptions.
+## Technical interview guide
 
-Licensed under the [MIT License](LICENSE).
+- [Architecture](ARCHITECTURE.md) — “Walk me through the system.”
+- [Yield Calculation Model](docs/YIELD_CALCULATION_MODEL.md) — “Where did manufacturing knowledge matter?”
+- [Engineering Evolution](docs/ENGINEERING_EVOLUTION.md) — “How did the architecture evolve?”
+- [Performance Evolution](docs/PERFORMANCE_EVOLUTION.md) — “Tell me about a performance problem.”
+- [Deployment Evolution](docs/DEPLOYMENT_EVOLUTION.md) — “How did you productionize it?”
+- [Engineering Terminology](docs/ENGINEERING_TERMINOLOGY.md) — “Which software concepts had you already implemented?”
+- [Truthfulness Audit](docs/TRUTHFULNESS_AUDIT.md) — exact claim classification
+
+## Clean-room boundary
+
+All source names, manufacturing identifiers, products, stages, failure categories, dates, values,
+configuration rules, and screenshots in this repository are fictional. The private applications
+were used only to identify architectural patterns, user workflows, performance decisions, and
+engineering lessons. No private implementation was copied.
+
+## License
+
+[MIT](LICENSE)

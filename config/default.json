@@ -1,0 +1,34 @@
+{
+  "application": {
+    "title": "Synthetic Production Yield",
+    "environment": "public-clean-room",
+    "log_level": "INFO",
+    "host": "127.0.0.1",
+    "port": 8050,
+    "waitress_threads": 8,
+    "refresh_seconds": 7200,
+    "generation_poll_seconds": 15
+  },
+  "storage": {
+    "root": "data/yield_runtime",
+    "retain_generations": 3,
+    "schema_version": 1
+  },
+  "synthetic_data": {
+    "seed": 20260814,
+    "work_order_count": 8,
+    "wafers_per_work_order": 12,
+    "chips_per_wafer": 81,
+    "start_date": "2026-01-05"
+  },
+  "refresh": {
+    "sorting_preload_seconds": 43200,
+    "sorting_background_delay_seconds": 0.2
+  },
+  "display": {
+    "default_period": "Week",
+    "default_weeks": 12,
+    "default_product_family": "All",
+    "top_pareto_items": 8
+  }
+}
