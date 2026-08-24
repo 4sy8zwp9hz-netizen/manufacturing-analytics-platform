@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "manufacturing-analytics-platform"
+version = "1.0.0"
+description = "A clean-room, synthetic recreation of a production manufacturing Yield Dashboard."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Matthew Chung" }]
+dependencies = [
+  "dash>=3.2,<4.0",
+  "pandas>=2.2,<3.0",
+  "plotly>=6.0,<7.0",
+  "pyarrow>=18,<24",
+  "waitress>=3.0,<4.0",
+]
+
+[project.optional-dependencies]
+sqlserver = ["pyodbc>=5.2,<6.0"]
+dev = [
+  "playwright>=1.52,<2.0",
+  "pytest>=8.3,<9.0",
+  "pytest-cov>=5.0,<7.0",
+  "ruff>=0.8,<1.0",
+]
+
+[project.scripts]
+manufacturing-analytics = "manufacturing_analytics.main:run"
+refresh-manufacturing-data = "manufacturing_analytics.scripts.refresh_data:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/manufacturing_analytics"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
