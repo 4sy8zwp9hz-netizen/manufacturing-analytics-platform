@@ -6,19 +6,53 @@ motivated it.
 The final architecture was not designed at the beginning. Each useful solution increased adoption
 or scope, which exposed the next limitation.
 
-## Evolution at a glance
+## Two evolution tracks at a glance
 
 ```mermaid
-flowchart LR
-    A["Raw manufacturing records"] -->|"data was not directly usable"| B["SQL + Pandas analysis"]
-    B -->|"manual repetition"| C["Interactive Dash applications"]
-    C -->|"other engineers needed them"| D["Packaged and versioned releases"]
-    D -->|"updates became difficult"| E["Central application distribution"]
-    E -->|"per-user work duplicated"| F["Server-hosted application portal"]
-    F -->|"startup and source load grew"| G["Cached and prebuilt data"]
-    G -->|"repeated source work remained"| H["Scheduled Parquet ETL"]
-    H -->|"refreshes can fail"| I["Last-known-good shared analytics"]
+flowchart TB
+    subgraph Y["Yield data and service"]
+        Y1["SQL + Pandas analysis"] --> Y2["Scoped queries + shared snapshots"]
+        Y2 --> Y3["Workload-specific preload and targeted detail"]
+        Y3 --> Y4["Scheduled Parquet ETL"]
+        Y4 --> Y5["Incremental and version-aware refresh"]
+        Y5 --> Y6["Atomic, bounded, last-known-good service"]
+    end
+    subgraph D["Application distribution and operation"]
+        D1["Local engineering application"] --> D2["Packaged and versioned releases"]
+        D2 --> D3["Central application access"]
+        D3 --> D4["Mounted WSGI application portal"]
+        D4 --> D5["Waitress hosting, health, logs, and recovery"]
+    end
+    D3 -. "shared use increased backend demand" .-> Y2
+    Y4 -. "prepared data enabled practical central use" .-> D4
 ```
+
+The tracks are related but not interchangeable. Yield evolved as a data product and long-running
+service. Distribution evolved as a reusable way to release, host, discover, monitor, and recover
+multiple manufacturing applications. Keeping them separate makes the scope of each improvement
+clear without pretending that the portal itself performs Yield ETL.
+
+## Yield backend iterations in practice
+
+The stable table-to-drilldown workflow can make the application look visually similar across
+releases. Underneath it, the backend changed repeatedly as correctness, history, and adoption
+exposed new constraints.
+
+| Iteration | Pressure that exposed it | Backend change | Engineering growth demonstrated |
+| --- | --- | --- | --- |
+| Establish the calculation | Heterogeneous records did not share an analytical grain | Normalize identities, revisions, stage dates, cohorts, and denominators in Pandas | Domain modeling and ETL correctness |
+| Narrow the source work | Small investigations still triggered broad retrieval | Resolve the population first and apply bounded, parameterized SQL predicates | Query planning and source-load control |
+| Reuse common state | Callbacks and users repeated the same transformations | Load a shared server snapshot and cache reusable analytical indexes | State ownership and memoization |
+| Separate workloads | Common views waited for unusually expensive analysis | Give expensive reusable analysis its own preload while keeping large detail lazy | Eager/lazy design and resource isolation |
+| Materialize prepared facts | Shared use still rebuilt broad source history | Publish validated Parquet facts on a schedule | Server-side ETL and analytical materialization |
+| Refresh incrementally | Complete historical rebuilds became increasingly wasteful | Reconcile new and corrected source records at their natural grain | Incremental processing and correction handling |
+| Evolve the data contract | Transformation changes could leave plausible but incompatible caches | Version pipeline outputs and rebuild state when compatibility changes | Cache invalidation and schema evolution |
+| Protect availability | A failed or overlapping refresh could disturb a valid view | Build separately, synchronize publication, and retain the last complete generation | Concurrency and fault-tolerant refresh |
+| Harden production behavior | Batching, polling, and memory edge cases appeared under continued use | Bound caches, batch appropriate reads, prevent overlapping work, and normalize late data variations | Operational debugging and defensive design |
+
+This sequence is more important than any individual library choice. It shows a progression from
+writing a correct analysis to owning the data lifecycle, performance envelope, concurrency, and
+failure behavior of a shared analytical service.
 
 ## 1. Getting the right data
 
@@ -130,7 +164,7 @@ generation. Users see a warning rather than an empty application.
 **Resulting concepts.** Server-side ETL, materialization, snapshots, immutable generations, atomic
 publication, fault-tolerant refresh, and last-known-good behavior.
 
-## UI evolution was architecture evolution
+## A stable workflow supported backend evolution
 
 Earlier interaction patterns could effectively be:
 
@@ -145,7 +179,9 @@ background/prebuilt population -> click -> cached view -> preserve current scree
 ```
 
 That change connected user experience to data architecture. Faster interactions did not come from
-visual styling; they came from moving work out of the click path.
+visual styling; they came from moving work out of the click path. Preserving the familiar
+table-to-drilldown workflow also reduced disruption for users while query, cache, ETL, and refresh
+internals continued to change.
 
 ## Broader application ecosystem
 

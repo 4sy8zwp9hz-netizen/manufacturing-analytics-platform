@@ -67,20 +67,37 @@ population—not merely a collection of charts.
 
 ![Selected-cell Yield investigation](docs/screenshots/yield-enhance.png)
 
-## Why the architecture changed
+## Two connected evolution tracks
 
-| Stage | New problem | Change made |
+The project did not advance primarily through visual redesign. The investigation workflow remained
+recognizable because it already matched how engineers reviewed Yield. Most later improvement
+happened beneath that interface in two connected tracks.
+
+### Yield data and service evolution
+
+| Observed limitation | Engineering response | Capability gained |
 | --- | --- | --- |
-| Engineering analysis | Source records were not usable as engineering populations | SQL plus Pandas transformation |
-| Repeated use | Manual analysis did not scale | Dash/Plotly application |
-| User adoption | Packaged applications became difficult to distribute and update | Versioned releases, shared configuration, central application access |
-| More data | Broad SQL and repeated calculations increased startup and interaction time | Query redesign, shared snapshots, and cache reuse |
-| Expensive analysis | Not every dataset belonged on the startup path | Lazy work, background prebuild, and separate preload cycles |
-| Shared use | Per-user processing duplicated the same database work | Central server hosting |
-| Repeated source work | Users and applications rebuilt the same analytical population | Scheduled ETL and prepared Parquet data |
-| Refresh failure | A failed rebuild could not interrupt a working production view | Last-known-good snapshot retention |
+| Source rows did not represent defensible Yield populations | SQL retrieval plus Pandas identity, revision, date, and cohort transformation | Traceable analytical facts |
+| Broad queries and callback calculations grew with history | Scope expensive retrieval before transfer and reuse shared server state | Lower source load and faster common interactions |
+| Common and specialized workloads competed during startup | Separate common facts, expensive reusable preloads, and targeted high-volume detail | Workload-specific latency and memory control |
+| Repeated source reconstruction continued across users | Build validated Parquet facts through scheduled ETL | Prepared data shared across sessions |
+| Full rebuilds made freshness expensive | Add incremental, correction-aware refresh paths where the source grain allowed them | More efficient historical maintenance |
+| Data contracts and caches changed over time | Version prepared pipelines and invalidate incompatible cache state | Safer application and data evolution |
+| Refreshes, concurrent polling, or oversized caches could affect availability | Add atomic publication, last-known-good retention, synchronization, batching, and bounds | More fault-tolerant service behavior |
 
-The detailed chronology is in [Engineering Evolution](docs/ENGINEERING_EVOLUTION.md).
+### Application distribution evolution
+
+| Adoption stage | Delivery response | Operational capability gained |
+| --- | --- | --- |
+| One engineer used a local application | Package and version repeatable releases | A usable tool could be shared |
+| Installed copies drifted and updates were difficult | Introduce shared configuration and centralized application access | More consistent releases and discovery |
+| Multiple applications each assumed they owned a listener | Refactor to portal-ready application factories and mounted WSGI routes | Several applications could share one entry point |
+| Browser users depended on the service | Add a central Windows host, Waitress, health checks, logs, restart commands, and watchdog behavior | A supportable operating model |
+
+These tracks reinforced one another. Central hosting removed duplicated per-user work, while the
+prepared-data architecture made centralized use practical. The detailed chronology is in
+[Engineering Evolution](docs/ENGINEERING_EVOLUTION.md), and the broader hosting progression is in
+[Deployment Evolution](docs/DEPLOYMENT_EVOLUTION.md).
 
 ## Three data-access strategies
 
@@ -163,6 +180,7 @@ health reporting.
 | Classification | What it means here |
 | --- | --- |
 | Direct analogue of completed work | SQL Server/`pyodbc` boundary, Pandas transformations, Dash/Plotly, JSON configuration, caches/preloads, background refresh, Parquet preparation, targeted retrieval, Waitress, portal mounting pattern, and failure-tolerant snapshots |
+| Documented production evolution | Incremental and correction-aware refresh, pipeline-version cache invalidation, and later batching, polling, and memory hardening are verified parts of the engineering history; this repository explains them without fabricating production scale or private implementation details |
 | Public-demo accommodation | Deterministic synthetic source records replace inaccessible production SQL sources |
 | Future design | A real SQL Server deployment of this public code, multi-process cache coordination, and additional sanitized workflows are not claimed as completed public features |
 

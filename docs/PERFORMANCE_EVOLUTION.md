@@ -22,6 +22,17 @@ The solution was iterative rather than one cache added at the end.
 | Large detail population | Load everything “just in case” | Population-scoped retrieval | Read only data needed for one investigation |
 | Visible blank/loading behavior | Page replaced while work completed | Retain the current view and show a thin progress state | Improved perceived and actual continuity |
 | Alias mapping repeated | Rebuild identity work | Cache exact/normalized physical-wafer indexes | Avoided repeated reconciliation cost |
+| Historical growth | Rebuild the complete prepared history | Reconcile incremental and corrected records where the source contract allowed it | Reduced unnecessary source and transformation work |
+| Pipeline logic changed | Reuse an older cache that still looked structurally valid | Version prepared-data contracts and rebuild incompatible state | Prevented stale logic from surviving a release |
+| Large reusable results | Allow in-process caches to grow without a clear limit | Bound cache entries and retain only useful reusable state | Controlled the service memory envelope |
+| Concurrent browser polling and refresh | Overlapping work could rebuild or publish the same expensive result | Add refresh locks, completed-state publication, and polling guards | Reduced races and duplicate work |
+| Large scoped key sets | Issue many small reads or one unbounded request | Batch parameterized retrieval at the appropriate source boundary | Balanced round trips, query size, and source load |
+
+The public application directly demonstrates scoped detail reads, common snapshots, separate
+preload behavior, refresh locking, atomic publication, and last-known-good retention. The later
+incremental-refresh, pipeline-compatibility, batching, polling, and memory rows document verified
+production evolution at a safe level; they are not presented as synthetic performance benchmarks
+or one-for-one copies of private code.
 
 ## Common, expensive-common, and detail workloads
 
