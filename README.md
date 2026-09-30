@@ -60,24 +60,41 @@ flowchart LR
 
 The architecture separates source access, manufacturing interpretation, prepared data, interactive analytics, and hosting so each layer can evolve independently.
 
+The runnable public path substitutes a deterministic synthetic source adapter for the unavailable production database. The pandas transformation, prepared-data, refresh, caching, drilldown, and UI layers preserve the architectural patterns.
+
 [View detailed architecture](ARCHITECTURE.md)
 
-## How the system evolved
+## Two connected evolution tracks
 
-The final architecture was not designed up front. Each successful stage exposed the next constraint.
+The project did not advance primarily through visual redesign. The investigation workflow remained
+recognizable because it already matched how engineers reviewed Yield. Most later improvement
+happened beneath that interface in two connected tracks.
 
-| Stage | New problem | Engineering response |
+### Yield data and service evolution
+
+| Observed limitation | Engineering response | Capability gained |
 | --- | --- | --- |
-| Engineering analysis | Source records were not usable as engineering populations | SQL plus pandas transformation |
-| Repeated investigation | Manual analysis had to be rebuilt | Dash/Plotly application |
-| User adoption | Local copies became difficult to distribute and maintain | Versioned releases and centralized access |
-| More data | Broad queries and repeated calculations slowed startup and interaction | Query scoping, caching, and precomputation |
-| Expensive analysis | Not every dataset belonged on the startup path | Lazy detail, background prebuild, and separate preload cycles |
-| Shared use | Per-user processing duplicated the same database work | Central server hosting |
-| Repeated source work | Common analytical populations were rebuilt repeatedly | Scheduled ETL and prepared Parquet data |
-| Refresh failure | A failed rebuild could not take down a working view | Last-known-good snapshot retention |
+| Source rows did not represent defensible Yield populations | SQL retrieval plus Pandas identity, revision, date, and cohort transformation | Traceable analytical facts |
+| Broad queries and callback calculations grew with history | Scope expensive retrieval before transfer and reuse shared server state | Lower source load and faster common interactions |
+| Common and specialized workloads competed during startup | Separate common facts, expensive reusable preloads, and targeted high-volume detail | Workload-specific latency and memory control |
+| Repeated source reconstruction continued across users | Build validated Parquet facts through scheduled ETL | Prepared data shared across sessions |
+| Full rebuilds made freshness expensive | Add incremental, correction-aware refresh paths where the source grain allowed them | More efficient historical maintenance |
+| Data contracts and caches changed over time | Version prepared pipelines and invalidate incompatible cache state | Safer application and data evolution |
+| Refreshes, concurrent polling, or oversized caches could affect availability | Add atomic publication, last-known-good retention, synchronization, batching, and bounds | More fault-tolerant service behavior |
 
-[Read the engineering evolution](docs/ENGINEERING_EVOLUTION.md)
+### Application distribution evolution
+
+| Adoption stage | Delivery response | Operational capability gained |
+| --- | --- | --- |
+| One engineer used a local application | Package and version repeatable releases | A usable tool could be shared |
+| Installed copies drifted and updates were difficult | Introduce shared configuration and centralized application access | More consistent releases and discovery |
+| Multiple applications each assumed they owned a listener | Refactor to portal-ready application factories and mounted WSGI routes | Several applications could share one entry point |
+| Browser users depended on the service | Add a central Windows host, Waitress, health checks, logs, restart commands, and watchdog behavior | A supportable operating model |
+
+These tracks reinforced one another. Central hosting removed duplicated per-user work, while the
+prepared-data architecture made centralized use practical. The detailed chronology is in
+[Engineering Evolution](docs/ENGINEERING_EVOLUTION.md), and the broader hosting progression is in
+[Deployment Evolution](docs/DEPLOYMENT_EVOLUTION.md).
 
 ## Selected engineering challenges
 
@@ -194,6 +211,18 @@ Tests cover source grains, identity ambiguity, revisions, cohort consistency, qu
 - [Deployment Evolution](docs/DEPLOYMENT_EVOLUTION.md)
 - [Engineering Terminology](docs/ENGINEERING_TERMINOLOGY.md)
 - [Truthfulness Audit](docs/TRUTHFULNESS_AUDIT.md)
+
+## Production pattern versus public accommodation
+
+| Classification | What it means here |
+| --- | --- |
+| Direct analogue of completed work | SQL Server/`pyodbc` boundary, Pandas transformations, Dash/Plotly, JSON configuration, caches/preloads, background refresh, Parquet preparation, targeted retrieval, Waitress, portal mounting pattern, and failure-tolerant snapshots |
+| Documented production evolution | Incremental and correction-aware refresh, pipeline-version cache invalidation, and later batching, polling, and memory hardening are verified parts of the engineering history; this repository explains them without fabricating production scale or private implementation details |
+| Public-demo accommodation | Deterministic synthetic source records replace inaccessible production SQL sources |
+| Future design | A real SQL Server deployment of this public code, multi-process cache coordination, and additional sanitized workflows are not claimed as completed public features |
+
+No SQLite, FastAPI, Jinja application, Redis, PostgreSQL, DuckDB, Docker, Kubernetes, cloud service,
+microservice system, or AI feature is part of the flagship architecture.
 
 ## Public implementation and confidentiality
 

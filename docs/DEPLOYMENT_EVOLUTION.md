@@ -23,6 +23,21 @@ Waitress-hosted browser access
 scheduled refresh, health checks, logs, restart support
 ```
 
+## Relationship to the Yield backend
+
+Application distribution and Yield data processing improved together, but they solved different
+problems:
+
+- the distribution track standardized how applications were packaged, discovered, mounted,
+  hosted, checked, restarted, and supported;
+- the Yield backend track standardized how manufacturing data was retrieved, transformed,
+  materialized, refreshed, validated, and served to the interface.
+
+Central hosting increased the importance of shared state, bounded resources, and predictable
+background work. In the other direction, prepared data and workload-specific refresh behavior made
+it practical for one hosted service to support multiple browser users without repeating the same
+source work for every session. Neither track replaces the other.
+
 ## Why each step happened
 
 ### Local application
